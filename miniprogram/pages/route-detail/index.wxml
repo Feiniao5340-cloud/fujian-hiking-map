@@ -1,0 +1,145 @@
+<view class="detail-page">
+  <view wx:if="{{status === 'loading'}}" class="not-found-card">
+    <text class="not-found-title">正在加载路线…</text>
+    <text class="not-found-copy">请稍候</text>
+    <button class="back-button" bindtap="onBackTap">返回路线列表</button>
+  </view>
+  <view wx:elif="{{status === 'invalid'}}" class="not-found-card">
+    <text class="not-found-mark">?</text>
+    <text class="not-found-title">缺少路线参数</text>
+    <text class="not-found-copy">请从路线列表选择一条路线。</text>
+    <button class="back-button" bindtap="onBackTap">返回路线列表</button>
+  </view>
+  <view wx:elif="{{status === 'error'}}" class="not-found-card">
+    <text class="not-found-mark">!</text>
+    <text class="not-found-title">路线加载失败</text>
+    <text class="not-found-copy">请检查网络后重试。</text>
+    <button class="back-button" bindtap="onRetryTap">重新加载</button>
+    <button class="back-button bottom-back" bindtap="onBackTap">返回路线列表</button>
+  </view>
+  <view wx:elif="{{status === 'notFound'}}" class="not-found-card">
+    <text class="not-found-mark">?</text>
+    <text class="not-found-title">没有找到这条路线</text>
+    <text class="not-found-copy">路线可能已被移除，请返回列表重新选择。</text>
+    <button class="back-button" bindtap="onBackTap">返回路线列表</button>
+  </view>
+
+  <block wx:elif="{{status === 'success'}}">
+    <view class="detail-hero">
+      <view class="detail-orb"></view>
+      <view class="detail-hill hill-back"></view>
+      <view class="detail-hill hill-front"></view>
+      <view class="detail-hero-top">
+        <text class="mock-label">路线详情</text>
+        <text class="route-type-label">{{route.displayRouteType}}</text>
+      </view>
+      <view class="detail-hero-copy">
+        <text class="detail-location">{{route.city}} · {{route.district}}</text>
+        <text class="detail-title">{{route.name}}</text>
+        <text class="detail-place">{{route.locationText}}</text>
+      </view>
+    </view>
+
+    <view class="stats-card">
+      <view class="stat-cell">
+        <text class="stat-label">全程距离</text>
+        <text class="stat-value">{{route.displayDistance}}</text>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-cell">
+        <text class="stat-label">预计用时</text>
+        <text class="stat-value">{{route.displayDuration}}</text>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-cell">
+        <text class="stat-label">难度</text>
+        <text class="stat-value">{{route.displayDifficulty}}</text>
+      </view>
+    </view>
+
+    <view class="detail-section">
+      <view class="section-heading">
+        <text class="section-marker">01</text>
+        <text class="section-name">路线简介</text>
+      </view>
+      <text class="summary-copy">{{route.summary}}</text>
+    </view>
+
+    <view class="detail-section info-section">
+      <view class="section-heading">
+        <text class="section-marker">02</text>
+        <text class="section-name">路线信息</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">累计爬升</text>
+        <text class="info-value">{{route.displayElevationGain}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">路线类型</text>
+        <text class="info-value">{{route.displayRouteType}}</text>
+      </view>
+    </view>
+
+    <view class="detail-section map-section">
+      <view class="section-heading">
+        <text class="section-marker">03</text>
+        <text class="section-name">路线地图</text>
+      </view>
+      <block wx:if="{{mapCenter}}">
+        <map wx:if="{{!mapRenderError}}" id="route-map" class="route-map"
+          latitude="{{mapCenter.latitude}}" longitude="{{mapCenter.longitude}}" scale="14"
+          markers="{{mapMarkers}}"
+          polyline="{{mapPolylines}}"
+          include-points="{{mapIncludePoints}}"
+          show-location="{{false}}" binderror="onMapError"
+          bindmarkertap="onMarkerTap" bindcallouttap="onMarkerTap" bindregionchange="onMapRegionChange" />
+        <view wx:else class="map-message">
+          <text>地图加载失败，请检查网络后重试。</text>
+          <button class="back-button map-retry" bindtap="onRetryTap">重新加载</button>
+        </view>
+        <text wx:if="{{!mapCenter.polyline.length}}" class="map-message">轨迹资料不足，暂不显示轨迹。</text>
+        <text wx:elif="{{mapCenter.discardedTrackPointCount > 0}}" class="map-message">部分轨迹资料暂不可用。</text>
+      </block>
+      <view wx:else class="map-message">起点位置暂不可用</view>
+      <!-- v0.1 暂不开放真实 GPS 循迹；页面处理函数、定位服务和算法回放保留。 -->
+      <view wx:if="{{selectedWaypoint}}" class="waypoint-card">
+        <text class="waypoint-order">节点 {{selectedWaypoint.order}}</text>
+        <text class="waypoint-name">{{selectedWaypoint.name}}</text>
+        <text wx:if="{{selectedWaypoint.description}}" class="waypoint-description">{{selectedWaypoint.description}}</text>
+        <text wx:else class="waypoint-description">暂无节点说明</text>
+        <view wx:if="{{accessRoute.errorCode === 'WALKING_RANGE_EXCEEDED'}}" class="navigation-feedback">
+          <text class="navigation-feedback-title">距离超出步行规划范围</text>
+          <text class="navigation-feedback-message">{{navigationMessage}}</text>
+        </view>
+        <view class="waypoint-card-actions">
+          <button class="navigation-button" bindtap="onOpenTargetTap" loading="{{nativeNavigation.status === 'opening'}}" disabled="{{nativeNavigation.status === 'opening'}}">打开目标位置</button>
+          <button class="navigation-button" bindtap="onPlanAccessTap" loading="{{accessRoute.status === 'locating' || accessRoute.status === 'planning'}}" disabled="{{nativeNavigation.status === 'opening' || accessRoute.status === 'locating' || accessRoute.status === 'planning'}}">规划到这里</button>
+        </view>
+        <text class="navigation-note">打开微信原生地图中的目标位置。</text>
+        <text class="navigation-note">步行接驳最多支持100公里；远距离出行请使用“打开目标位置”。</text>
+        <text class="navigation-note">目标：{{selectedWaypoint.name}}</text>
+        <text class="navigation-note">点击规划时获取一次位置，经云服务与高德规划步行接驳。绿色为徒步路线，蓝色为临时接驳路线；规划不保证山路可通行。</text>
+        <text wx:if="{{accessRoute.status === 'locating'}}" class="navigation-note">正在获取当前位置…</text>
+        <text wx:elif="{{accessRoute.status === 'planning'}}" class="navigation-note">正在规划步行接驳…</text>
+        <view wx:elif="{{accessRoute.status === 'success'}}">
+          <text class="navigation-note">接驳距离：{{accessSummary.distance}}</text>
+          <text class="navigation-note">预计步行：{{accessSummary.minutes}} min</text>
+          <button class="navigation-button" bindtap="onClearAccessTap">清除接驳路线</button>
+        </view>
+        <text wx:if="{{navigationMessage && accessRoute.errorCode !== 'WALKING_RANGE_EXCEEDED'}}" class="navigation-note">{{navigationMessage}}</text>
+      </view>
+      <text wx:if="{{navigationMessage && !selectedWaypoint}}" class="navigation-note">{{navigationMessage}}</text>
+    </view>
+
+    <view class="demo-notice">
+      <view class="notice-symbol">!</view>
+      <view class="notice-copy">
+        <text class="notice-title">资料说明</text>
+        <text wx:if="{{route.notice}}" class="notice-text">{{route.notice}}</text>
+        <text wx:if="{{route.source}}" class="notice-text">来源：{{route.source.infoSource}}</text>
+      </view>
+    </view>
+
+    <button class="back-button bottom-back" bindtap="onBackTap">返回路线列表</button>
+  </block>
+</view>

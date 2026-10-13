@@ -1,0 +1,270 @@
+.routes-page {
+  min-height: 100vh;
+  padding: 42rpx 34rpx 55rpx;
+}
+
+.state-card {
+  padding: 40rpx 24rpx;
+  border: 1rpx solid #e5e0d5;
+  border-radius: 15rpx;
+  background: #fffdf8;
+  text-align: center;
+}
+
+.state-title,
+.state-copy {
+  display: block;
+  font-size: 25rpx;
+}
+
+.state-copy {
+  margin-top: 14rpx;
+  color: #758078;
+  font-size: 21rpx;
+}
+
+.retry-button {
+  margin-top: 24rpx;
+  border-radius: 10rpx;
+  background: #315d47;
+  color: #fffdf8;
+  font-size: 23rpx;
+}
+
+.page-heading {
+  margin: 5rpx 4rpx 28rpx;
+}
+
+.page-kicker {
+  color: #8b7964;
+  font-size: 17rpx;
+  letter-spacing: 4rpx;
+}
+
+.heading-line {
+  display: flex;
+  align-items: baseline;
+  margin-top: 10rpx;
+}
+
+.page-title {
+  font-size: 51rpx;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+}
+
+.route-count {
+  margin-left: auto;
+  color: #728077;
+  font-size: 21rpx;
+}
+
+.page-subtitle {
+  display: block;
+  margin-top: 12rpx;
+  color: #758078;
+  font-size: 23rpx;
+}
+
+.mock-notice {
+  display: flex;
+  align-items: center;
+  min-height: 65rpx;
+  margin-bottom: 24rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid #ded8c9;
+  border-radius: 9rpx;
+  background: #eeeade;
+  color: #746b5e;
+  font-size: 18rpx;
+}
+
+.notice-mark {
+  width: 29rpx;
+  height: 29rpx;
+  margin-right: 11rpx;
+  border-radius: 50%;
+  background: #c47a55;
+  color: #fffaf0;
+  font-size: 19rpx;
+  line-height: 29rpx;
+  text-align: center;
+  font-family: Georgia, serif;
+}
+
+.route-card {
+  overflow: hidden;
+  margin-bottom: 22rpx;
+  border: 1rpx solid #e5e0d5;
+  border-radius: 15rpx;
+  background: #fffdf8;
+  box-shadow: 0 9rpx 24rpx rgba(47, 57, 45, 0.055);
+}
+
+.card-art {
+  position: relative;
+  height: 225rpx;
+  overflow: hidden;
+  background: linear-gradient(150deg, #9cac8c 0%, #60806b 58%, #345846 100%);
+}
+
+.art-1 {
+  background: linear-gradient(145deg, #c4aa7d 0%, #8b8e69 53%, #52644d 100%);
+}
+
+.art-2 {
+  background: linear-gradient(145deg, #9ea99d 0%, #6f8275 53%, #344b43 100%);
+}
+
+.art-sun {
+  position: absolute;
+  top: 29rpx;
+  right: 76rpx;
+  width: 62rpx;
+  height: 62rpx;
+  border-radius: 50%;
+  background: rgba(235, 215, 165, 0.8);
+}
+
+.art-ridge {
+  position: absolute;
+  right: -30rpx;
+  bottom: -72rpx;
+  left: -48rpx;
+  height: 174rpx;
+  border-radius: 50% 50% 0 0 / 35% 35% 0 0;
+  transform: rotate(-7deg);
+}
+
+.ridge-back {
+  bottom: -42rpx;
+  left: 95rpx;
+  background: rgba(207, 203, 164, 0.55);
+  transform: rotate(10deg);
+}
+
+.ridge-front {
+  background: rgba(36, 68, 54, 0.78);
+}
+
+.art-index,
+.art-type {
+  position: absolute;
+  z-index: 1;
+  color: #fffaf0;
+}
+
+.art-index {
+  top: 25rpx;
+  left: 25rpx;
+  font-size: 19rpx;
+  letter-spacing: 3rpx;
+}
+
+.art-type {
+  right: 24rpx;
+  bottom: 20rpx;
+  padding: 5rpx 14rpx;
+  border: 1rpx solid rgba(255, 250, 240, 0.64);
+  border-radius: 24rpx;
+  font-size: 17rpx;
+}
+
+.card-content {
+  padding: 22rpx 24rpx 21rpx;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+}
+
+.route-name {
+  font-size: 31rpx;
+  font-weight: 600;
+}
+
+.difficulty-pill {
+  margin-left: auto;
+  padding: 5rpx 13rpx;
+  border-radius: 24rpx;
+  background: #e8eee6;
+  color: #55725e;
+  font-size: 17rpx;
+}
+
+.difficulty-moderate {
+  background: #f3ecdc;
+  color: #9a7745;
+}
+
+.difficulty-hard {
+  background: #f3e6df;
+  color: #a3644d;
+}
+
+.route-location {
+  display: block;
+  margin-top: 6rpx;
+  color: #82877e;
+  font-size: 19rpx;
+}
+
+.card-divider {
+  height: 1rpx;
+  margin: 17rpx 0 15rpx;
+  background: #ece8df;
+}
+
+.route-facts {
+  display: flex;
+  align-items: center;
+}
+
+.fact-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 156rpx;
+}
+
+.fact-label {
+  color: #90938a;
+  font-size: 17rpx;
+}
+
+.fact-value {
+  margin-top: 2rpx;
+  color: #31473b;
+  font-size: 23rpx;
+  font-weight: 500;
+}
+
+.fact-separator {
+  width: 1rpx;
+  height: 38rpx;
+  margin-right: 24rpx;
+  background: #e4e0d7;
+}
+
+.card-arrow {
+  margin-left: auto;
+  color: #55715e;
+  font-size: 29rpx;
+}
+
+.list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 32rpx 0 7rpx;
+  color: #97988d;
+  font-size: 16rpx;
+}
+
+.footer-rule {
+  width: 38rpx;
+  height: 1rpx;
+  margin: 0 13rpx;
+  background: #d4d0c4;
+}

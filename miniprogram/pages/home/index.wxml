@@ -1,0 +1,46 @@
+<view class="home-page">
+  <view class="brand-row">
+    <view class="brand-mark">闽</view>
+    <view class="brand-copy">
+      <text class="brand-name">MIN TRAILS</text>
+      <text class="brand-caption">FUJIAN · HIKING NOTES</text>
+    </view>
+    <view class="edition-pill">DAY 01</view>
+  </view>
+
+  <view class="hero-card">
+    <view class="hero-sun"></view>
+    <view class="mountain mountain-back"></view>
+    <view class="mountain mountain-front"></view>
+    <view class="hero-copy">
+      <text class="eyebrow">把周末交给山野</text>
+      <text class="hero-title">山路，
+慢慢走。</text>
+      <text class="hero-description">从一条福建徒步路线开始，看看沿途的风景。</text>
+    </view>
+    <view class="hero-index"><text>01</text><view></view><text>03</text></view>
+  </view>
+
+  <view class="intro-row">
+    <view>
+      <text class="section-kicker">FIND YOUR TRAIL</text>
+      <text class="section-title">今天想去哪座山？</text>
+    </view>
+    <view class="compass-mark">↗</view>
+  </view>
+
+  <button class="explore-button" bindtap="onExploreTap">
+    <text>探索徒步路线</text>
+    <text class="button-arrow">→</text>
+  </button>
+
+  <view class="home-footnote">
+    <view class="footnote-dot"></view>
+    <text>路线资料从云端读取，当前测试内容请勿用于出行</text>
+  </view>
+
+  <view class="bottom-caption">
+    <text>走进福建</text>
+    <text>EST. 2026</text>
+  </view>
+</view>

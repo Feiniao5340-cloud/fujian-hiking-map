@@ -1,0 +1,72 @@
+<view class="routes-page">
+  <view class="page-heading">
+    <text class="page-kicker">TRAIL COLLECTION</text>
+    <view class="heading-line">
+      <text class="page-title">徒步路线</text>
+      <text class="route-count">{{routeCount}} 条</text>
+    </view>
+    <text class="page-subtitle">挑一条喜欢的路线，向山里出发。</text>
+  </view>
+
+  <view class="mock-notice">
+    <view class="notice-mark">i</view>
+    <text>路线从云端读取，当前资料用于开发测试，请勿用于实际出行。</text>
+  </view>
+
+  <view wx:if="{{status === 'loading'}}" class="state-card">
+    <text class="state-title">正在加载路线…</text>
+  </view>
+  <view wx:elif="{{status === 'error'}}" class="state-card">
+    <text class="state-title">路线加载失败</text>
+    <text class="state-copy">请检查网络后重试。</text>
+    <button class="retry-button" bindtap="onRetryTap">重新加载</button>
+  </view>
+  <view wx:elif="{{status === 'empty'}}" class="state-card">
+    <text class="state-title">暂无路线</text>
+    <text class="state-copy">路线资料整理中，请稍后再来。</text>
+    <button class="retry-button" bindtap="onRetryTap">重新加载</button>
+  </view>
+  <view wx:else class="route-list">
+    <view
+      class="route-card"
+      wx:for="{{routes}}"
+      wx:key="_id"
+      data-id="{{item._id}}"
+      bindtap="onRouteTap"
+    >
+      <view class="card-art art-{{index}}">
+        <view class="art-sun"></view>
+        <view class="art-ridge ridge-back"></view>
+        <view class="art-ridge ridge-front"></view>
+        <text class="art-index">0{{index + 1}}</text>
+        <text class="art-type">{{item.displayRouteType}}</text>
+      </view>
+      <view class="card-content">
+        <view class="card-title-row">
+          <text class="route-name">{{item.name}}</text>
+          <text class="difficulty-pill difficulty-{{item.difficulty}}">{{item.displayDifficulty}}</text>
+        </view>
+        <text class="route-location">{{item.city}} · {{item.district}}</text>
+        <view class="card-divider"></view>
+        <view class="route-facts">
+          <view class="fact-item">
+            <text class="fact-label">距离</text>
+            <text class="fact-value">{{item.displayDistance}}</text>
+          </view>
+          <view class="fact-separator"></view>
+          <view class="fact-item">
+            <text class="fact-label">预计用时</text>
+            <text class="fact-value">{{item.displayDuration}}</text>
+          </view>
+          <text class="card-arrow">↗</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="list-footer">
+    <view class="footer-rule"></view>
+    <text>路线资料整理中 · 请勿用于实际出行</text>
+    <view class="footer-rule"></view>
+  </view>
+</view>

@@ -1,0 +1,26 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/routes/index",
+    "pages/route-detail/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#F4F1E9",
+    "navigationBarTitleText": "闽行 · 徒步路线",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F4F1E9"
+  },
+  "style": "v2",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于您主动发起步行接驳规划时获取一次当前位置"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation",
+    "startLocationUpdate",
+    "onLocationChange"
+  ],
+  "sitemapLocation": "sitemap.json"
+}

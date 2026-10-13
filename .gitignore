@@ -1,0 +1,42 @@
+node_modules/
+miniprogram_npm/
+dist/
+project.private.config.json
+.DS_Store
+Thumbs.db
+
+# Raw route exports may contain private third-party metadata.
+/data/raw/gpx/
+/data/temporary/
+*.gpx
+*.gpx+xml
+
+# Credentials and private configuration (no runtime .env loader is implied).
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.source.json
+project.private*.json
+
+# Private originals and retired fixtures are outside the public release allowlist.
+/response.json
+/data/seed/
+/miniprogram/data/mock-routes.js
+
+# Local backups, logs and temporary outputs; never blanket-ignore data/routes.
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+~$*
+/backups/
+/.backups/
+/tmp/
+/temp/
+/outputs/
