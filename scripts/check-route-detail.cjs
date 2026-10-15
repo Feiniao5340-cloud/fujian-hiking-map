@@ -55,6 +55,8 @@ function harness() {
         if (name === "../../utils/format") return require(path.join(root, "miniprogram/utils/format.js"));
         if (name === "../../utils/map-data") return require(path.join(root, "miniprogram/utils/map-data.js"));
         if (name === "../../utils/trail-progress") return require(path.join(root, "miniprogram/utils/trail-progress.js"));
+        if (name === "../../utils/native-route-overview") return require(path.join(root, "miniprogram/utils/native-route-overview.js"));
+        if (name === "../../utils/trail-simulator") return require(path.join(root, "miniprogram/utils/trail-simulator.js"));
         if (name === "../../services/navigation-service") return require(path.join(root, "miniprogram/services/navigation-service.js"));
         if (name === "../../services/trail-follow-service") return require(path.join(root, "miniprogram/services/trail-follow-service.js"));
         throw new Error(`页面出现未允许的依赖（包括 Mock）：${name}`);

@@ -3,10 +3,15 @@ const { toStartMapData, composeNavigationMap } = require("../../utils/map-data")
 const navigation = require("../../services/navigation-service");
 const trailFollow = require("../../services/trail-follow-service");
 const progress = require("../../utils/trail-progress");
+const simulator = require("../../utils/trail-simulator");
+const SIMULATION_MARKER_ID = -2;
+const emptySimulation = () => ({ status: "idle", statusText: "尚未开始",
+  playbackText: "0 m · 0.0%", matchedText: "待匹配", remainingText: "待匹配", b1Text: "待匹配", message: "", snapshot: null });
 const emptyFollow = () => ({ status: "idle", message: "", location: null, accuracyText: "", updatedText: "", stale: false, cleanupPending: false,
   walkedText: "待确认", progressText: "待确认", remainingText: "待确认", quality: "unavailable", qualityText: "等待定位", offRouteStatus: "unknown", canComplete: false });
 const qualityText = quality => ({ reliable: "定位可靠", degraded: "精度较低，进度冻结", unavailable: "精度不足或未知", stale: "位置已过期", jump: "位置跳变，进度冻结", ambiguous: "路段不确定，进度冻结", recovering: "正在重新确认路段" }[quality] || "等待定位");
 const {
+  formatRouteCopy,
   formatDistance,
   formatDuration,
   formatDifficulty,
@@ -14,7 +19,8 @@ const {
   formatElevationGain
 } = require("../../utils/format");
 
-Page({
+const routeOverview = require("../../utils/native-route-overview");
+const definition = {
   data: {
     route: null,
     status: "loading",
@@ -24,6 +30,7 @@ Page({
     followState: emptyFollow(),
     followPrivacyVisible: false,
     followCamera: false,
+    simulationState: emptySimulation(),
     mapMarkers: [],
     nativeNavigation: { status: "idle", errorCode: null },
     accessRoute: navigation.emptyAccessRoute(),
@@ -84,7 +91,8 @@ Page({
           displayDuration: formatDuration(route.estimatedDurationMinutes),
           displayDifficulty: formatDifficulty(route.difficulty),
           displayRouteType: formatRouteType(route.routeType),
-          displayElevationGain: formatElevationGain(route.elevationGainMeters)
+          displayElevationGain: formatElevationGain(route.elevationGainMeters),
+          ...formatRouteCopy(route)
         })
       });
       console.info("[route-detail] 云端详情读取成功，_id：", this._routeId);
@@ -98,6 +106,7 @@ Page({
   },
 
   resetDetail(status) {
+    this.disposeSimulation();
     this.stopFollow();
     this.clearNavigation();
     this.setData({ status, route: null, mapCenter: null, mapRenderError: false, selectedWaypoint: null });
@@ -107,7 +116,7 @@ Page({
   onMarkerTap(event) {
     if (this._unloaded || this.data.status !== "success") return;
     const id = event && event.detail && event.detail.markerId;
-    if (id === -1) return;
+    if (id === -1 || id === SIMULATION_MARKER_ID) return;
     const { route, mapCenter } = this.data;
     if (!this.data.selectedWaypoint || this.data.selectedWaypoint.id !== id) this.clearNavigation();
     if (!Number.isSafeInteger(id) || id <= 0 || !mapCenter
@@ -134,6 +143,7 @@ Page({
 
   onMapError(event) {
     if (this._unloaded || this.data.status !== "success") return;
+    this.pauseSimulation("地图异常，模拟已暂停；恢复地图后再继续。");
     this.stopFollow();
     if (this.data.accessRoute.status === "success") {
       this.clearNavigation();
@@ -150,6 +160,7 @@ Page({
 
   onUnload() {
     this._unloaded = true;
+    this.disposeSimulation();
     this.stopFollow();
     this._loadVersion = (this._loadVersion || 0) + 1;
     this._loading = false;
@@ -158,7 +169,7 @@ Page({
     Object.assign(this.data, { accessRoute: navigation.emptyAccessRoute(),
       nativeNavigation: { status: "idle", errorCode: null }, mapPolylines: [], mapIncludePoints: [],
       navigationMessage: "", accessSummary: { distance: "", minutes: null },
-      followState: emptyFollow(), followPrivacyVisible: false, followCamera: false, mapMarkers: [] });
+      followState: emptyFollow(), followPrivacyVisible: false, followCamera: false, mapMarkers: [], simulationState: emptySimulation() });
   },
 
   clearNavigation() {
@@ -171,6 +182,7 @@ Page({
 
   onHide() {
     this._hidden = true;
+    this.pauseSimulation("返回页面后请主动继续模拟。");
     if (this._followSession || this._trailModel) this.stopFollow("paused");
     else this.setData({ followCamera: false });
     this.clearNavigation();
@@ -243,6 +255,147 @@ Page({
   },
 
   onClearAccessTap() { this.clearNavigation(); },
+
+  stopSimulationTimer() {
+    this._simulationTimerGeneration = (this._simulationTimerGeneration || 0) + 1;
+    if (this._simulationTimer != null) clearInterval(this._simulationTimer);
+    if (this._simulationDrainTimer != null) clearTimeout(this._simulationDrainTimer);
+    this._simulationDrainTimer = null;
+    this._simulationTimer = null;
+    this._simulationLastAt = null;
+  },
+  disposeSimulation() {
+    this.stopSimulationTimer();
+    this._simulationVersion = (this._simulationVersion || 0) + 1;
+    const session = this._simulationSession;
+    this._simulationSession = null;
+    if (session) { try { session.dispose(); } catch (_) { /* 不阻断页面离开 */ } }
+    if (!this._unloaded) {
+      this.setData({ simulationState: emptySimulation() });
+      this.updateSimulationMarker(null);
+    }
+  },
+  simulationMarkerPatch(location) {
+    if (this._unloaded) return {};
+    const markers = this.data.mapMarkers || [], i = markers.findIndex(m => m.id === SIMULATION_MARKER_ID);
+    if (!location || this.data.mapRenderError) {
+      return i >= 0 ? { mapMarkers: markers.filter(m => m.id !== SIMULATION_MARKER_ID) } : {};
+    }
+    if (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)
+      || Math.abs(location.latitude) > 90 || Math.abs(location.longitude) > 180
+      || (location.latitude === 0 && location.longitude === 0)) throw new Error("INVALID_SIMULATION_POINT");
+    if (i >= 0 && markers[i].latitude === location.latitude && markers[i].longitude === location.longitude) return {};
+    const marker = { id: SIMULATION_MARKER_ID, latitude: location.latitude, longitude: location.longitude,
+      iconPath: "/assets/map/simulation.png", width: 22, height: 22, anchor: { x: 0.5, y: 0.5 }, zIndex: 10,
+      callout: { content: "模拟位置（非GPS）", display: "ALWAYS", color: "#795222", bgColor: "#fff6e6", padding: 6, borderRadius: 6 } };
+    return i < 0 ? { mapMarkers: [...markers, marker] }
+      : { [`mapMarkers[${i}].latitude`]: location.latitude, [`mapMarkers[${i}].longitude`]: location.longitude };
+  },
+  updateSimulationMarker(location) {
+    const patch = this.simulationMarkerPatch(location);
+    if (Object.keys(patch).length) this.setData(patch);
+  },
+  publishSimulation(snapshot, message = "", visualOnly = false) {
+    if (this._unloaded) return;
+    const patch = this.simulationMarkerPatch(snapshot.visualPlayback ? snapshot.visualLocation : snapshot.simulatedLocation);
+    if (visualOnly) {
+      if (Object.keys(patch).length) this.setData(patch);
+      return;
+    }
+    this._simulationLastPanelAt = Date.now();
+    const unsupported = snapshot.errorCode === "INVALID_ROUTE";
+    const statusText = unsupported ? "当前路线不支持模拟" : ({ idle: "尚未开始", playing: "正在模拟", paused: "已暂停",
+      finished: "模拟播放已到终点", error: "模拟异常" }[snapshot.playbackStatus] || "模拟异常");
+    const ratio = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "待匹配";
+    const meters = value => Number.isFinite(value) ? (value === 0 ? "0 m" : formatDistance(value)) : "待匹配";
+    const state = { status: snapshot.playbackStatus, statusText,
+      playbackText: `${meters(snapshot.visualPlayback ? snapshot.visualDistanceMeters : snapshot.playbackDistanceMeters)} · ${ratio(snapshot.visualPlayback ? snapshot.visualRatio : snapshot.playbackRatio)}`,
+      matchedText: snapshot.matchedProgressMeters === null ? "待匹配" : `${meters(snapshot.matchedProgressMeters)} · ${ratio(snapshot.matchedProgressRatio)}`,
+      remainingText: meters(snapshot.remainingMeters),
+      b1Text: snapshot.b1Phase === "starting" ? "正在进行B1轨迹匹配" : snapshot.b1Reason === "PROGRESS_CONFIRMING" ? "B1正在确认进度" : snapshot.locationQuality === "reliable" ? "B1匹配可靠"
+        : ({ ambiguous: "B1路段歧义，等待确认", recovering: "B1正在重新匹配" }[snapshot.locationQuality] || "B1待匹配"),
+      message: message || (snapshot.playbackStatus === "finished" ? "模拟播放完成，仅为算法演示，不代表实际徒步完成。"
+        : snapshot.errorCode ? (unsupported ? "路线资料不适合模拟，原地图与接驳功能仍可使用。" : "模拟异常，已停止播放，可重新播放。") : ""), snapshot };
+    if (JSON.stringify(state) !== JSON.stringify(this.data.simulationState)) patch.simulationState = state;
+    // 同一快照的Marker与面板只过一次数据桥；不会重发Trail或include-points。
+    if (Object.keys(patch).length) this.setData(patch);
+  },
+  simulationFailure() {
+    this.disposeSimulation();
+    if (!this._unloaded) this.setData({ simulationState: { ...emptySimulation(), status: "error", statusText: "模拟异常",
+      message: "模拟异常，已停止播放，可重新播放。" } });
+  },
+  tickSimulation() {
+    if (this._hidden || this._unloaded || !this._simulationSession) return;
+    const now = Date.now(), delta = now - this._simulationLastAt;
+    if (delta === 0) return;
+    this._simulationLastAt = now;
+    try {
+      if (!Number.isFinite(delta) || delta < 0 || delta > simulator.TIMING.maxAdvanceMs) {
+        this.pauseSimulation("播放时间间隔异常，已暂停，请主动继续。"); return;
+      }
+      const snapshot = this._simulationSession.advance(delta);
+      if (snapshot.errorCode || snapshot.playbackStatus !== "playing") this.stopSimulationTimer();
+      this.publishSimulation(snapshot, "", !snapshot.errorCode && snapshot.playbackStatus === "playing" && now - this._simulationLastPanelAt < 200);
+      if (snapshot.hasPendingFrames) this.queueSimulationDrain();
+    } catch (_) { this.simulationFailure(); }
+  },
+  runSimulationTimer() {
+    if (this._simulationTimer != null) return;
+    const session = this._simulationSession, route = this.data.route, version = this._simulationVersion;
+    const generation = this._simulationTimerGeneration = (this._simulationTimerGeneration || 0) + 1;
+    this._simulationLastAt = Date.now();
+    this._simulationTimer = setInterval(() => {
+      if (this._unloaded || this._hidden || this.data.route !== route || this._simulationSession !== session || this._simulationVersion !== version || this._simulationTimerGeneration !== generation) return;
+      this.tickSimulation();
+    }, simulator.FAST_DEMO.visualRefreshMs);
+  },
+  queueSimulationDrain() {
+    if (this._simulationDrainTimer != null || this._hidden || this._unloaded || !this._simulationSession) return;
+    const session = this._simulationSession, route = this.data.route, generation = this._simulationTimerGeneration;
+    this._simulationDrainTimer = setTimeout(() => {
+      if (this._hidden || this._unloaded || this.data.route !== route || this._simulationSession !== session || generation !== this._simulationTimerGeneration) return;
+      this._simulationDrainTimer = null;
+      try {
+        const snapshot = session.drain();
+        if (snapshot.errorCode || snapshot.playbackStatus !== "playing") { this.stopSimulationTimer(); this.publishSimulation(snapshot); }
+        else if (snapshot.hasPendingFrames) this.queueSimulationDrain();
+      } catch (_) { this.simulationFailure(); }
+    }, simulator.FAST_DEMO.yieldMs);
+  },
+  pauseSimulation(message = "") {
+    this.stopSimulationTimer();
+    if (!this._simulationSession || this._unloaded) return;
+    try {
+      const snapshot = this._simulationSession.getSnapshot();
+      this.publishSimulation(snapshot.playbackStatus === "playing" ? this._simulationSession.pause() : snapshot, message);
+    } catch (_) { this.simulationFailure(); }
+  },
+  simulationAction(action) {
+    if (this._unloaded || this._hidden || this.data.status !== "success" || this.data.mapRenderError || !this.data.mapCenter) return;
+    try {
+      if (!this._simulationSession) {
+        if (!["start", "restart"].includes(action)) return;
+        this._simulationVersion = (this._simulationVersion || 0) + 1;
+        this._simulationSession = simulator.createSimulator(this.data.route, { fastDemo: true, visualPlayback: true });
+      }
+      const session = this._simulationSession, current = session.getSnapshot();
+      if (current.errorCode === "INVALID_ROUTE") { this.publishSimulation(current); this.stopSimulationTimer(); return; }
+      if (action === "start" && current.playbackStatus !== "idle") return;
+      if (action === "resume" && current.playbackStatus !== "paused") return;
+      if (this._simulationSession !== session) return;
+      let snapshot;
+      if (action === "restart") { this.stopSimulationTimer(); session.restart(); this.updateSimulationMarker(null); snapshot = session.start(); }
+      else snapshot = session[action]();
+      this.publishSimulation(snapshot);
+      if (snapshot.playbackStatus === "playing" && !snapshot.errorCode) this.runSimulationTimer();
+      else this.stopSimulationTimer();
+    } catch (_) { this.simulationFailure(); }
+  },
+  onSimulationStartTap() { this.simulationAction("start"); },
+  onSimulationPauseTap() { this.pauseSimulation(); },
+  onSimulationResumeTap() { this.simulationAction("resume"); },
+  onSimulationRestartTap() { this.simulationAction("restart"); },
 
   followSummary() {
     const model = this._trailModel, index = this._trailIndex;
@@ -433,6 +586,7 @@ Page({
   },
 
   onBackTap() {
+    this.disposeSimulation();
     wx.navigateBack({
       delta: 1,
       fail() {
@@ -440,4 +594,5 @@ Page({
       }
     });
   }
-});
+};
+Page(routeOverview.install(definition,wx,"ROUTE-OVERVIEW-v0.2"));

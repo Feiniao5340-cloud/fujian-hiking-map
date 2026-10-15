@@ -40,3 +40,14 @@ project.private*.json
 /tmp/
 /temp/
 /outputs/
+
+# Private development/QA reports and raw demonstration material.
+/docs/DAY5_*.md
+/docs/DAY6_*.md
+/docs/DAY7_*.md
+/qa/
+/private/
+/diagnostics/
+/screenshots-private/
+/recordings-private/
+/review-private/

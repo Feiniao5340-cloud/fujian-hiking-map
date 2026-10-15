@@ -5,7 +5,6 @@
       <text class="brand-name">MIN TRAILS</text>
       <text class="brand-caption">FUJIAN · HIKING NOTES</text>
     </view>
-    <view class="edition-pill">DAY 01</view>
   </view>
 
   <view class="hero-card">
@@ -18,7 +17,6 @@
 慢慢走。</text>
       <text class="hero-description">从一条福建徒步路线开始，看看沿途的风景。</text>
     </view>
-    <view class="hero-index"><text>01</text><view></view><text>03</text></view>
   </view>
 
   <view class="intro-row">
@@ -36,7 +34,7 @@
 
   <view class="home-footnote">
     <view class="footnote-dot"></view>
-    <text>路线资料从云端读取，当前测试内容请勿用于出行</text>
+    <text>路线信息仅供参考，出行前请核实天气、道路和开放情况。</text>
   </view>
 
   <view class="bottom-caption">

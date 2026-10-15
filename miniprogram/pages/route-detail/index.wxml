@@ -34,9 +34,9 @@
         <text class="route-type-label">{{route.displayRouteType}}</text>
       </view>
       <view class="detail-hero-copy">
-        <text class="detail-location">{{route.city}} · {{route.district}}</text>
+        <text class="detail-location">{{route.city}} · {{route.displayDistrict}}</text>
         <text class="detail-title">{{route.name}}</text>
-        <text class="detail-place">{{route.locationText}}</text>
+        <text class="detail-place">{{route.displayLocationText}}</text>
       </view>
     </view>
 
@@ -62,7 +62,7 @@
         <text class="section-marker">01</text>
         <text class="section-name">路线简介</text>
       </view>
-      <text class="summary-copy">{{route.summary}}</text>
+      <text class="summary-copy">{{route.displaySummary}}</text>
     </view>
 
     <view class="detail-section info-section">
@@ -92,7 +92,7 @@
           polyline="{{mapPolylines}}"
           include-points="{{mapIncludePoints}}"
           show-location="{{false}}" binderror="onMapError"
-          bindmarkertap="onMarkerTap" bindcallouttap="onMarkerTap" bindregionchange="onMapRegionChange" />
+          bindmarkertap="onMarkerTap" bindcallouttap="onMarkerTap" bindregionchange="onMapRegionChange" bind:interpolatepoint="onNativeOverviewPoint" />
         <view wx:else class="map-message">
           <text>地图加载失败，请检查网络后重试。</text>
           <button class="back-button map-retry" bindtap="onRetryTap">重新加载</button>
@@ -102,6 +102,36 @@
       </block>
       <view wx:else class="map-message">起点位置暂不可用</view>
       <!-- v0.1 暂不开放真实 GPS 循迹；页面处理函数、定位服务和算法回放保留。 -->
+      <view wx:if="{{overviewMode}}" class="simulation-panel">
+        <text class="simulation-title">路线速览</text>
+        <text class="simulation-warning">本功能根据正式徒步轨迹快速展示路线走向，仅用于地图演示，不代表实时GPS定位或实时轨迹匹配。</text>
+        <text class="navigation-note">暂停时会走完当前短段再停，预计最多约1秒。</text>
+        <text class="simulation-status">{{overviewState.text}}</text>
+        <view class="simulation-controls">
+          <button class="navigation-button" bindtap="onSimulationStartTap" disabled="{{overviewState.status === 'playing' || overviewState.status === 'starting' || overviewState.status === 'pausing'}}">开始速览</button>
+          <button class="navigation-button" bindtap="onSimulationPauseTap" disabled="{{overviewState.status !== 'playing'}}">暂停</button>
+          <button class="navigation-button" bindtap="onSimulationResumeTap" disabled="{{overviewState.status !== 'paused'}}">继续</button>
+          <button class="navigation-button" bindtap="onSimulationRestartTap">重新播放</button>
+        </view>
+        <text class="navigation-note">{{overviewState.message}}</text>
+      </view>
+      <view wx:else class="simulation-panel">
+        <text class="simulation-title">轨迹模拟演示</text>
+        <text class="simulation-warning">虚拟位置演示，不代表真实GPS定位。</text>
+        <text class="simulation-status">{{mapCenter ? simulationState.statusText : '当前路线不支持模拟'}}</text>
+        <view class="simulation-actions">
+          <button class="navigation-button" bindtap="onSimulationStartTap" disabled="{{!mapCenter || mapRenderError || simulationState.status !== 'idle'}}">开始模拟</button>
+          <button class="navigation-button" bindtap="onSimulationPauseTap" disabled="{{simulationState.status !== 'playing'}}">暂停</button>
+          <button class="navigation-button" bindtap="onSimulationResumeTap" disabled="{{!mapCenter || mapRenderError || simulationState.status !== 'paused'}}">继续</button>
+          <button class="navigation-button" bindtap="onSimulationRestartTap" disabled="{{!mapCenter || mapRenderError}}">重新播放</button>
+        </view>
+        <text class="navigation-note">模拟播放位置：{{simulationState.playbackText}}</text>
+        <text class="navigation-note">B1已确认进度：{{simulationState.matchedText}}</text>
+        <text class="navigation-note">剩余轨迹距离：{{simulationState.remainingText}}</text>
+        <text class="navigation-note">{{simulationState.b1Text}}</text>
+        <text class="navigation-note">自动快速演示，标准目标约17秒。播放位置与B1匹配进度可能不同，不代表实际徒步用时。</text>
+        <text wx:if="{{simulationState.message}}" class="simulation-warning" role="alert">{{simulationState.message}}</text>
+      </view>
       <view wx:if="{{selectedWaypoint}}" class="waypoint-card">
         <text class="waypoint-order">节点 {{selectedWaypoint.order}}</text>
         <text class="waypoint-name">{{selectedWaypoint.name}}</text>
@@ -131,14 +161,6 @@
       <text wx:if="{{navigationMessage && !selectedWaypoint}}" class="navigation-note">{{navigationMessage}}</text>
     </view>
 
-    <view class="demo-notice">
-      <view class="notice-symbol">!</view>
-      <view class="notice-copy">
-        <text class="notice-title">资料说明</text>
-        <text wx:if="{{route.notice}}" class="notice-text">{{route.notice}}</text>
-        <text wx:if="{{route.source}}" class="notice-text">来源：{{route.source.infoSource}}</text>
-      </view>
-    </view>
 
     <button class="back-button bottom-back" bindtap="onBackTap">返回路线列表</button>
   </block>

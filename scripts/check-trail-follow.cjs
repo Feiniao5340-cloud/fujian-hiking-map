@@ -281,8 +281,9 @@ async function main() {
   await test('公开页面无旧循迹绑定；六路线正常操作不启动持续GPS，Native与Access保留', async () => {
     // 仅移除过期的UI可见性断言；上面的17组定位/进度/暂停/完成回归保持执行。
     const handlers = new Set([...template.matchAll(/\b(?:bind|catch):?[a-z]+="([^"]+)"/g)].map(match => match[1]));
-    assert.deepEqual([...handlers].sort(), ['onBackTap', 'onClearAccessTap', 'onMapError', 'onMapRegionChange',
-      'onMarkerTap', 'onOpenTargetTap', 'onPlanAccessTap', 'onRetryTap'].sort());
+    assert.deepEqual([...handlers].sort(), ['onBackTap', 'onClearAccessTap', 'onMapError', 'onMapRegionChange', 'onNativeOverviewPoint',
+      'onMarkerTap', 'onOpenTargetTap', 'onPlanAccessTap', 'onRetryTap', 'onSimulationStartTap',
+      'onSimulationPauseTap', 'onSimulationResumeTap', 'onSimulationRestartTap'].sort());
     const config = JSON.parse(read('miniprogram/app.json'));
     for (const page of config.pages) {
       const markup = read('miniprogram/' + page + '.wxml');

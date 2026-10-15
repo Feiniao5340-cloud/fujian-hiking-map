@@ -1,5 +1,5 @@
 const { getRouteList } = require("../../services/route-service");
-const { formatDistance, formatDuration, formatDifficulty, formatRouteType } = require("../../utils/format");
+const { formatRouteCopy, formatDistance, formatDuration, formatDifficulty, formatRouteType } = require("../../utils/format");
 
 Page({
   data: {
@@ -25,7 +25,8 @@ Page({
         displayDistance: formatDistance(route.distanceMeters),
         displayDuration: formatDuration(route.estimatedDurationMinutes),
         displayDifficulty: formatDifficulty(route.difficulty),
-        displayRouteType: formatRouteType(route.routeType)
+        displayRouteType: formatRouteType(route.routeType),
+        ...formatRouteCopy(route)
       }));
 
       this.setData({

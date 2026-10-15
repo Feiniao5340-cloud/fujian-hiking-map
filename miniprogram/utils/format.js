@@ -50,7 +50,23 @@ function formatElevationGain(meters) {
   return `${Math.round(meters)} m`;
 }
 
+function formatRouteCopy(route) {
+  let displayDistrict = route.district;
+  let displayLocationText = route.locationText;
+  let displaySummary = route.summary;
+  if (route._id === "fj-route-005") {
+    if (typeof displayDistrict === "string") displayDistrict = displayDistrict.replace("（行政区划待核对）", "");
+    if (typeof displayLocationText === "string") displayLocationText = displayLocationText.replace("具体行政区划与通行条件待核对。", "今日通行条件待核对。");
+  }
+  if (typeof displaySummary === "string") {
+    const labels = { 简单: "轻松", 中等: "适中", 困难: "较难" };
+    displaySummary = displaySummary.replace(/难度为(简单|中等|困难)/g, (_, label) => "难度为" + labels[label]).replace(/（项目参考评级）/g, "");
+  }
+  return { displayDistrict, displayLocationText, displaySummary };
+}
+
 module.exports = {
+  formatRouteCopy,
   formatDistance,
   formatDuration,
   formatDifficulty,

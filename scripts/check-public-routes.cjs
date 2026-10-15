@@ -17,15 +17,20 @@ const commands = [
   ['scripts/check-trail-follow.cjs'], ['scripts/check-trail-replay.cjs','--unit'],
   ['scripts/check-trail-replay.cjs','--matrix'], ['scripts/check-trail-replay.cjs','--formal'],
   ['scripts/check-trail-replay.cjs','--dense'],
-  ['scripts/check-b1-verification.cjs','--before','docs/evidence/day6-b1-before-progress.txt']
+  ['scripts/check-b1-verification.cjs','--before','docs/evidence/day6-b1-before-progress.txt'],
+  ['scripts/check-trail-simulator.cjs'],
+  ['scripts/check-trail-simulation-page.cjs'],
+  ['scripts/check-simulation-marker.cjs'],
+  ['scripts/check-trail-simulation-performance.cjs'],
+  ['scripts/check-native-route-overview.cjs']
 ];
 const scriptFiles = [...new Set(commands.map(c=>c[0])), 'scripts/formal-route-fixtures.cjs',
   'scripts/gpx-to-track.cjs','scripts/prepare-gpx-route.cjs','scripts/prepare-gpx-route.ps1','scripts/check-public-routes.cjs'];
 const sourceFiles = ['project.config.json', 'miniprogram/app.js','miniprogram/app.json','miniprogram/app.wxss','miniprogram/sitemap.json',
   'miniprogram/config/env.js', 'miniprogram/services/route-service.js','miniprogram/services/navigation-service.js',
   'miniprogram/services/trail-follow-service.js','miniprogram/utils/format.js','miniprogram/utils/map-data.js',
-  'miniprogram/utils/trail-progress.js', ...['home','routes','route-detail'].flatMap(p=>['js','json','wxml','wxss'].map(ext=>`miniprogram/pages/${p}/index.${ext}`)),
-  ...['start','waypoint','location'].map(n=>`miniprogram/assets/map/${n}.png`),
+  'miniprogram/utils/trail-progress.js','miniprogram/utils/trail-simulator.js','miniprogram/utils/native-route-overview.js', ...['home','routes','route-detail'].flatMap(p=>['js','json','wxml','wxss'].map(ext=>`miniprogram/pages/${p}/index.${ext}`)),
+  ...['start','waypoint','location','simulation'].map(n=>`miniprogram/assets/map/${n}.png`),
   'cloudfunctions/planAccessRoute/index.js','cloudfunctions/planAccessRoute/package.json'];
 const dataFiles = Object.values(FILES).flatMap(f=>['data/routes/'+f,'data/routes/'+f.replace('.json','-import.json')]);
 const publicTestFiles = [...sourceFiles,...scriptFiles,...dataFiles,'docs/evidence/day6-b1-before-progress.txt'];
