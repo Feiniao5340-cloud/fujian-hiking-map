@@ -1,9 +1,11 @@
+const { APPROVED_ACCESS, consentEvent, startAccess } = require('./access-consent-fixtures.cjs');
 // 真实Page、Day5引擎、B1及Navigation；正式六路线，时间/微信均为替身。
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
+const { textHash, checkTextIntegrityNegatives } = require('./text-integrity.cjs');
 const { performance } = require('node:perf_hooks');
 const simulator = require('../miniprogram/utils/trail-simulator');
 const { loadFormalRoutes } = require('./formal-route-fixtures.cjs');
@@ -29,8 +31,9 @@ const protectedHashes = {
   "data/routes/xiaoping-forest-park.json": "e953b3483189e26634347928224043de29eed50eca85fa96b250958bcb06de2e",
   "data/routes/yushandao-import.json": "0e6b4dfdd503b94215c15a5fd70c92d89a1c4371079234052aae50dfbc9f8471",
   "data/routes/yushandao.json": "99a5afa37e12dc67bfd17ffc87b831224e3fce211c986c80990bfb07b512a94c",
-  "miniprogram/services/navigation-service.js": "4898b902bd59d9bf86fc31f7d2b8834c4a91d12cb4dd8a0d53fd0ee76b2fcbd4",
-  "miniprogram/services/trail-follow-service.js": "8b87946c63594f77002f39e49ea15f6d6051e1df0d20790fe79f2f0b34a404ab",
+  "miniprogram/services/navigation-service.js": "79d82daa3dd16576ef6c985974c21793aafa1ea48d549ec84343abdc50d38985",
+  // Day2 authorized service repair; all other original protected hashes remain unchanged.
+  "miniprogram/services/trail-follow-service.js": "048a57639866a4a4f33c6270c24ef1f896756f115ca7dccf02297ef1741ea842",
   "miniprogram/utils/map-data.js": "d72e158c3863dbed910bd1d262c5b3c0b616455f467e0a8132a97b7cc7cb229e",
   "miniprogram/utils/trail-progress.js": "11430fe6002eb91bbf82e20e216e890b72f7314003f56f6b7896ba669bd6ef86",
   "scripts/formal-route-fixtures.cjs": "87064f60ed695dd59e38b6a30d9e9582911b9a55df2df67fed3b1fed7453d5d9"
@@ -45,7 +48,7 @@ function harness(clockOptions = {}) {
   const clock = { setInterval(fn, interval) { const t = { fn, interval, due: now + interval }; timers.add(t); return t; }, clearInterval(t) { timers.delete(t); },
     setTimeout(fn, interval) { const t = { fn, interval: 0, due: now + interval }; timers.add(t); return t; }, clearTimeout(t) { timers.delete(t); } };
   const forbiddenGps = () => { calls.gps++; throw new Error('模拟不得启动真实GPS'); };
-  const wx = { startLocationUpdate: forbiddenGps, onLocationChange: forbiddenGps,
+  const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); }, startLocationUpdate: forbiddenGps, onLocationChange: forbiddenGps,
     getLocation(o) { calls.location.push(o); o.success({ ...current.track[104] }); },
     openLocation(o) { calls.native.push(o); o.success(); },
     cloud: { callFunction(o) { calls.cloud.push(o); }, database() { throw new Error('不能读写真实云'); } },
@@ -59,7 +62,7 @@ function harness(clockOptions = {}) {
     navigateBack() { calls.back++; }, redirectTo() { calls.back++; } };
   const module = { exports: {} };
   vm.runInNewContext(read('miniprogram/services/navigation-service.js'), { wx, module, ...clock,
-    require: () => require('../miniprogram/config/env') });
+    require: name => name.includes('access-privacy') ? APPROVED_ACCESS : require('../miniprogram/config/env') });
   const navigation = module.exports;
   const api = { ...simulator, createSimulator(route, options) {
     calls.creates++; if (flags.createError) throw new Error('create failure');
@@ -116,7 +119,16 @@ async function test(name, fn) { await fn(); cases.push(name); }
 const marker = p => p.data.mapMarkers.find(m => m.id === -2);
 async function main() {
   await test('六正式/Import/B1与受保护服务SHA不变，引擎获授权扩展', async () => {
-    for (const [file, hash] of Object.entries(protectedHashes)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'), hash, file);
+    checkTextIntegrityNegatives();
+    for (const [file, hash] of Object.entries(protectedHashes)) {
+      const bytes = fs.readFileSync(path.join(root, file));
+      // These two approved edited services retain their exact-byte Day2/R2 baselines.
+      const actual = file.startsWith('miniprogram/services/') ? crypto.createHash('sha256').update(bytes).digest('hex') : textHash(bytes);
+      assert.equal(actual, hash, file);
+      // Mutate actual protected text in memory: substantive edits must still fail.
+      const mutated = Buffer.concat([bytes, Buffer.from(" ")]);
+      assert.notEqual(file.startsWith('miniprogram/services/') ? crypto.createHash('sha256').update(mutated).digest('hex') : textHash(mutated), hash, file + ' substantive mutation');
+    }
   });
   await test('四路线B1面板、真实起点/Marker、匹配进度独立，模拟无GPS/云；008/010速览另测', async () => {
     for (const r of b1PageRoutes) {
@@ -194,7 +206,7 @@ async function main() {
       p.onMarkerTap({ detail: { markerId: waypoint.id } }); assert.equal(p.data.selectedWaypoint.name, waypoint.name);
     }
     await p.onOpenTargetTap(); assert.equal(h.calls.native.length, 1); assert.equal(p.data.simulationState.snapshot.virtualElapsedMs, s.virtualElapsedMs);
-    const planning = p.onPlanAccessTap(); await flush(); assert.equal(h.calls.location.length, 1); assert.equal(h.calls.cloud.length, 1);
+    const planning = startAccess(p); await flush(); assert.equal(h.calls.location.length, 1); assert.equal(h.calls.cloud.length, 1);
     assert.deepEqual(plain(h.calls.cloud[0].data.origin), routes[0].track[104]);
     assert.notDeepEqual(plain(h.calls.cloud[0].data.origin), { latitude: marker(p).latitude, longitude: marker(p).longitude });
     h.calls.cloud[0].success({ result: { success: true, distanceMeters: 30, durationSeconds: 20, points: routes[0].track.slice(104, 106) } });
@@ -204,14 +216,14 @@ async function main() {
     p.onSimulationRestartTap(); assert.equal(p.data.mapPolylines.length, 2); await h.advance(2000); assert(marker(p));
     const snapshot = plain(p.data.simulationState.snapshot); p.onClearAccessTap(); assert.equal(p.data.mapPolylines.length, 1);
     assert.deepEqual(p.data.simulationState.snapshot, snapshot); assert(marker(p)); assert.equal(h.calls.gps, 0);
-    const pending = p.onPlanAccessTap(); await flush(); const late = h.calls.cloud[1];
+    const pending = startAccess(p); await flush(); const late = h.calls.cloud[1];
     await h.open(p, routes[1]); late.success({ result: { success: true, distanceMeters: 30, durationSeconds: 20, points: routes[0].track.slice(104, 106) } });
     await pending; assert.equal(p.data.accessRoute.status, 'idle'); assert(!marker(p)); p.onUnload();
   });
   await test('Access渲染异常仍保留Trail，模拟暂停后可主动继续', async () => {
     const h = harness(), p = h.page(); await h.open(p); p.onSimulationStartTap(); await h.advance(6000);
     p.onMarkerTap({ detail: { markerId: routes[0].waypoints[0].id } });
-    const planning = p.onPlanAccessTap(); await flush();
+    const planning = startAccess(p); await flush();
     h.calls.cloud[0].success({ result: { success: true, distanceMeters: 20, durationSeconds: 10, points: routes[0].track.slice(104, 106) } }); await planning;
     p.onMapError(); assert.equal(p.data.simulationState.status, 'paused'); assert.equal(h.timers.size, 0);
     assert.equal(p.data.mapRenderError, false); assert.equal(p.data.mapPolylines.length, 1);
@@ -284,7 +296,7 @@ async function main() {
   });
   const markup = read('miniprogram/pages/route-detail/index.wxml');
   assert(markup.includes('<text class="simulation-warning">虚拟位置演示，不代表真实GPS定位。</text>'));
-  assert(markup.includes('show-location="{{false}}"')); assert(!/bindtap="onStartFollowTap"|bindagreeprivacyauthorization="onFollowPrivacyAgree"/.test(markup));
+  assert(markup.includes('show-location="{{false}}"')); assert(markup.includes('disabled="{{!!followPlatformBlock')); assert(markup.includes('open-type="agreePrivacyAuthorization"'));
   assert(!/demo-notice|notice-symbol|notice-copy|notice-title|notice-text|资料说明|onSimulationRateTap|data-rate=|播放倍率/.test(markup));
   const css = read('miniprogram/pages/route-detail/index.wxss');
   assert(!/\.demo-notice|\.notice-symbol|\.notice-copy|\.notice-title|\.notice-text|simulation-rate/.test(css));
@@ -322,7 +334,7 @@ async function main() {
     await h.advance(3000); assert.equal(h.calls.overviewMoves.length,moves); assert.equal(p.getPlanBSummary().progressRatio,frozen);
     const w=r.waypoints[0];p.onMarkerTap({detail:{markerId:w.id}});assert.equal(p.data.selectedWaypoint.name,w.name);
     await p.onOpenTargetTap();assert.equal(h.calls.native.length,1);
-    const planning=p.onPlanAccessTap();await flush(); assert.deepEqual(plain(h.calls.cloud[0].data.origin),r.track[104]);
+    const planning=startAccess(p);await flush(); assert.deepEqual(plain(h.calls.cloud[0].data.origin),r.track[104]);
     h.calls.cloud[0].success({result:{success:true,distanceMeters:20,durationSeconds:15,points:r.track.slice(104,106)}}); await planning;
     const selected=p.data.selectedWaypoint;p.onMarkerTap({detail:{markerId:-2}});assert.equal(p.data.selectedWaypoint,selected);assert.equal(p.data.mapPolylines.length,2);
     p.onClearAccessTap();assert.equal(p.data.mapPolylines.length,1);assert.equal(p.getPlanBSummary().progressRatio,frozen);
@@ -337,6 +349,22 @@ async function main() {
     oldMove.success();assert.equal(p.data.route._id,'fj-route-011');assert.equal(p.data.overviewMode,false);
     await h.open(p,routes.find(r=>r._id==='fj-route-008'));h.wx.createMapContext=()=>({});p.onSimulationStartTap();assert.equal(p.data.overviewState.status,'error');assert.equal(p.data.mapPolylines.length,1);
     p.onUnload();assert.equal(h.timers.size,0);
+  });
+  await test('Day2 six-route simulation cannot acquire map while real-follow lease is held', async () => {
+    for (const r of routes) {
+      const h = harness(), p = h.page(); await h.open(p, r);
+      const claim = p.claimNavigationMode('REAL_FOLLOW'); assert(claim);
+      p.onSimulationStartTap(); p.onSimulationRestartTap(); p.onSimulationResumeTap();
+      assert.equal(h.calls.creates, 0); assert.equal(h.calls.overviewMoves.length, 0); assert.equal(h.calls.gps, 0);
+      p.releaseNavigationMode(claim); p.onSimulationStartTap();
+      if (overview.enabledRoute(r)) assert.equal(h.calls.overviewMoves.length, 1); else assert.equal(h.calls.creates, 1);
+      p.onUnload(); assert.equal(h.timers.size, 0);
+    }
+  });
+  await test('Day2 idle B1 resume does not leak a mode lease', async () => {
+    const h = harness(), p = h.page(); await h.open(p, b1PageRoutes[0]); p.onSimulationResumeTap();
+    assert.equal(p.getNavigationMode(), 'IDLE'); const claim = p.claimNavigationMode('REAL_FOLLOW'); assert(claim); p.releaseNavigationMode(claim);
+    p.onUnload(); assert.equal(h.calls.gps, 0);
   });
   console.log(JSON.stringify({ result: 'PASS', evidence: 'LOCAL_UI_LOGIC_PASS / DEVTOOLS_PENDING', cases, estimates, performanceReport, maximumProjectionAheadMeters,
     realGpsDuringSimulation: false, cloudWrites: false, realAmapRequests: false }, null, 2));

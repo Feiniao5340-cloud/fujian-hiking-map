@@ -5,6 +5,16 @@ const trailFollow = require("../../services/trail-follow-service");
 const progress = require("../../utils/trail-progress");
 const simulator = require("../../utils/trail-simulator");
 const SIMULATION_MARKER_ID = -2;
+// OWNER_CONFIRMED：当前账号前台接口及含两种位置用途的隐私指引已生效。
+// 私人QA与高德Access政策门分离；不代表平台独立核验或设备PASS。
+function privateFollowBlock() {
+  try {
+    const account = wx.getAccountInfoSync().miniProgram;
+    if (!account || !/^wx[0-9a-f]{16}$/i.test(account.appId) || !["develop", "trial"].includes(account.envVersion))
+      return "真实循迹仅供当前已获准账号的私人开发／体验版测试；请核对运行身份，正式版暂未启用。";
+  } catch (_) { return "无法确认私人开发／体验版运行身份，未启动定位。"; }
+  return "";
+}
 const emptySimulation = () => ({ status: "idle", statusText: "尚未开始",
   playbackText: "0 m · 0.0%", matchedText: "待匹配", remainingText: "待匹配", b1Text: "待匹配", message: "", snapshot: null });
 const emptyFollow = () => ({ status: "idle", message: "", location: null, accuracyText: "", updatedText: "", stale: false, cleanupPending: false,
@@ -20,6 +30,8 @@ const {
 } = require("../../utils/format");
 
 const routeOverview = require("../../utils/native-route-overview");
+// 仅保存资源令牌，不保存位置。异步请求/清理跨hide与换路线仍持有令牌。
+const navigationClaims = new Set();
 const definition = {
   data: {
     route: null,
@@ -29,6 +41,16 @@ const definition = {
     selectedWaypoint: null,
     followState: emptyFollow(),
     followPrivacyVisible: false,
+    followPlatformBlock: privateFollowBlock(),
+    followLabels: { idle: "尚未开始", blocked: "暂未启用", starting: "检查权限及确认起点", resuming: "重新获取真实位置",
+      following: "真实定位循迹中", paused: "已暂停，定位已停止", stopping: "正在确认停止定位", ended: "已结束", completed: "用户已确认完成",
+      error: "定位或清理异常", permissionDenied: "位置权限未授权" },
+    followPrivacyStatus: "idle",
+    followPrivacyMessage: "",
+    followPrivacyContractName: "隐私保护指引",
+    accessRecoveryMessage: "",
+    accessConsent: { visible: false, requestId: 0, stage: "idle", message: "", ...navigation.getAccessPreflight() },
+    nativeRecoveryMessage: "",
     followCamera: false,
     simulationState: emptySimulation(),
     mapMarkers: [],
@@ -38,6 +60,37 @@ const definition = {
     mapIncludePoints: [],
     navigationMessage: "",
     accessSummary: { distance: "", minutes: null }
+  },
+
+  claimNavigationMode(kind) {
+    for (const claim of navigationClaims) {
+      const session = claim.page._followSession;
+      if (claim.kind === "REAL_FOLLOW" && session && session.cancelled && session.cleanupState
+        && !session.cleanupState.ownsLocation) navigationClaims.delete(claim);
+    }
+    const real = kind === "REAL_FOLLOW";
+    if ([...navigationClaims].some(c => real
+      ? c.kind !== "REAL_FOLLOW" && !(c.kind === "NATIVE_OVERVIEW" && c.page === this)
+      : c.kind === "REAL_FOLLOW")) return null;
+    const claim = { kind, page: this };
+    navigationClaims.add(claim);
+    return claim;
+  },
+  releaseNavigationMode(claim) { if (claim) navigationClaims.delete(claim); },
+  getNavigationMode() {
+    const priorities = ["REAL_FOLLOW", "ACCESS", "NATIVE_TARGET", "NATIVE_OVERVIEW", "B1_SIMULATION"];
+    return priorities.find(kind => [...navigationClaims].some(c => c.kind === kind)) || "IDLE";
+  },
+  prepareNavigationAction(kind) {
+    if (this._navigationTransition || this._hidden || this._unloaded) return null;
+    if (!this._followSession) return this.claimNavigationMode(kind);
+    const route = this.data.route;
+    this._navigationTransition = true;
+    return (async () => { try {
+      if (this._followSession && !await this.stopFollow("paused")) return null;
+      if (this._hidden || this._unloaded || this.data.route !== route) return null;
+      return this.claimNavigationMode(kind);
+    } finally { this._navigationTransition = false; } })();
   },
 
   onLoad(options) {
@@ -106,10 +159,15 @@ const definition = {
   },
 
   resetDetail(status) {
+    if (this._cancelPrivacyCheck) this._cancelPrivacyCheck();
+    this._privacyGeneration = (this._privacyGeneration || 0) + 1;
     this.disposeSimulation();
     this.stopFollow();
     this.clearNavigation();
-    this.setData({ status, route: null, mapCenter: null, mapRenderError: false, selectedWaypoint: null });
+    this.setData({ status, route: null, mapCenter: null, mapRenderError: false, selectedWaypoint: null,
+      followPrivacyVisible: false, followPrivacyStatus: "idle", followPrivacyMessage: "",
+      accessRecoveryMessage: this._accessRequest && !this._accessRequest.finished && !this._accessRequest.sdkSettled ? "上一单次定位请求仍在等待回执，请检查请求状态。" : "",
+      nativeRecoveryMessage: this._nativeCleanup ? "上一次地图路线速览尚未确认停止，请检查清理状态。" : "" });
     this.setData({ mapPolylines: [], mapIncludePoints: [], mapMarkers: [] });
   },
 
@@ -160,6 +218,8 @@ const definition = {
 
   onUnload() {
     this._unloaded = true;
+    this.cancelAccessIntent();
+    if (this._cancelPrivacyCheck) this._cancelPrivacyCheck();
     this.disposeSimulation();
     this.stopFollow();
     this._loadVersion = (this._loadVersion || 0) + 1;
@@ -173,6 +233,7 @@ const definition = {
   },
 
   clearNavigation() {
+    this.cancelAccessIntent();
     this._navigationVersion = (this._navigationVersion || 0) + 1;
     if (this._unloaded) return;
     const accessRoute = navigation.emptyAccessRoute();
@@ -182,6 +243,9 @@ const definition = {
 
   onHide() {
     this._hidden = true;
+    if (this._cancelPrivacyCheck) this._cancelPrivacyCheck();
+    this._privacyGeneration = (this._privacyGeneration || 0) + 1;
+    this.setData({ followPrivacyVisible: false, followPrivacyStatus: this.data.followPrivacyStatus === "checking" ? "idle" : this.data.followPrivacyStatus });
     this.pauseSimulation("返回页面后请主动继续模拟。");
     if (this._followSession || this._trailModel) this.stopFollow("paused");
     else this.setData({ followCamera: false });
@@ -210,9 +274,11 @@ const definition = {
 
   async onOpenTargetTap() {
     if (this.data.nativeNavigation.status === "opening") return;
-    if (this._followSession && !await this.stopFollow("paused")) return;
+    const prepared = this.prepareNavigationAction("NATIVE_TARGET");
+    const claim = prepared && typeof prepared.then === "function" ? await prepared : prepared;
+    if (!claim) return;
     const snapshot = this.navigationSnapshot();
-    if (!snapshot) return;
+    if (!snapshot) { this.releaseNavigationMode(claim); return; }
     this.setData({ nativeNavigation: { status: "opening", errorCode: null } });
     try {
       await navigation.openTarget(snapshot.target);
@@ -221,23 +287,114 @@ const definition = {
       if (!this.navigationIsCurrent(snapshot)) return;
       const code = navigation.errorCode(error, "OPEN_LOCATION_FAILED");
       this.setData({ nativeNavigation: { status: "error", errorCode: code }, navigationMessage: navigation.errorMessage(code) });
-    }
+    } finally { this.releaseNavigationMode(claim); }
   },
 
   async onPlanAccessTap() {
+    if (this._accessRequest && !this._accessRequest.finished && !this._accessRequest.sdkSettled) { this.onAccessRecoveryTap(); return; }
     if (["locating", "planning"].includes(this.data.accessRoute.status) || this.data.nativeNavigation.status === "opening") return;
-    if (this._followSession && !await this.stopFollow("paused")) return;
+    if (this._accessIntent) return;
     const snapshot = this.navigationSnapshot();
     if (!snapshot) return;
-    this.setData({ accessRoute: navigation.emptyAccessRoute("locating") });
+    const intent = { id: this._accessIntentGeneration = (this._accessIntentGeneration || 0) + 1, snapshot, stage: "pending" };
+    this._accessIntent = intent;
+    this.setData({ accessConsent: { visible: true, requestId: intent.id, stage: "pending", message: "",
+      targetName: snapshot.target.name, ...navigation.getAccessPreflight() } });
+  },
+  accessIntentIsCurrent(intent) {
+    return !!intent && this._accessIntent === intent && this.navigationIsCurrent(intent.snapshot);
+  },
+  accessEventIntent(event) {
+    const intent = this._accessIntent;
+    const id = Number(event && event.currentTarget && event.currentTarget.dataset.requestId);
+    return this.accessIntentIsCurrent(intent) && id === intent.id ? intent : null;
+  },
+  cancelAccessIntent() {
+    const intent = this._accessIntent;
+    this._accessIntent = null;
+    if (intent && intent.cancelPrivacy) intent.cancelPrivacy();
+    if (!this._unloaded && this.data.accessConsent.visible) this.setData({ accessConsent: { ...this.data.accessConsent, visible: false } });
+  },
+  onAccessConsentCancel(event) {
+    if (this.accessEventIntent(event)) this.clearNavigation();
+  },
+  onAccessConsentContentTap() {},
+  onAccessWeChatPrivacyAgree(event) {
+    const intent = this.accessEventIntent(event);
+    if (event && event.type === "agreeprivacyauthorization" && intent && !intent.wechatPolicyFailed && intent.stage === "wechatPrivacy" && intent.agreePrivacy) intent.agreePrivacy();
+  },
+  onAccessWeChatPrivacyView(event) {
+    const intent = this.accessEventIntent(event);
+    if (!intent || intent.stage !== "wechatPrivacy") return;
+    const fail = () => { if (this.accessIntentIsCurrent(intent)) { intent.wechatPolicyFailed = true;
+      this.setData({ accessConsent: { ...this.data.accessConsent, wechatPolicyFailed: true, message: "微信隐私指引未能打开，请暂不使用；本次不会定位或规划。" } }); } };
+    try { wx.openPrivacyContract({ fail }); } catch (_) { fail(); }
+  },
+  waitAccessPrivacy(intent) {
+    intent.stage = "wechatPrivacy";
+    this.setData({ accessConsent: { ...this.data.accessConsent, stage: "wechatPrivacy", message: "本次高德同意已记录；还需您单独阅读并同意微信隐私指引。" } });
+    return new Promise(resolve => {
+      let done = false;
+      const finish = value => { if (done) return; done = true; clearTimeout(timer); resolve(value); };
+      const timer = setTimeout(() => finish(false), 20000);
+      intent.cancelPrivacy = () => finish(false);
+      intent.agreePrivacy = () => finish(this.accessIntentIsCurrent(intent));
+    });
+  },
+  async onAccessPolicyTap(event) {
+    const intent = this.accessEventIntent(event);
+    if (!intent || intent.stage !== "pending" || intent.policyOpening) return;
+    intent.policyOpening = true;
+    try { await navigation.openAccessPrivacyPolicy(); }
+    catch (_) { if (this.accessIntentIsCurrent(intent)) { intent.policyFailed = true;
+      this.setData({ accessConsent: { ...this.data.accessConsent, ready: false, message: "政策阅读入口未能打开。请暂不使用；本次不会定位或规划。" } }); } }
+    finally { intent.policyOpening = false; }
+  },
+  async onAccessConsentAgree(event) {
+    const intent = this.accessEventIntent(event);
+    if (!intent || intent.stage !== "pending" || intent.policyFailed || intent.policyOpening) return;
+    const preflight = navigation.getAccessPreflight();
+    if (!preflight.ready) { this.setData({ accessConsent: { ...this.data.accessConsent, ...preflight, message: preflight.blockedReason } }); return; }
+    intent.stage = "authorizing";
+    this.setData({ accessConsent: { ...this.data.accessConsent, stage: "authorizing", message: "正在检查本次微信隐私与位置权限…" } });
+    return this.performAccessRequest(intent);
+  },
+  async performAccessRequest(intent) {
+    if (!this.accessIntentIsCurrent(intent) || intent.stage !== "authorizing") return;
+    const prepared = this.prepareNavigationAction("ACCESS");
+    const claim = prepared && typeof prepared.then === "function" ? await prepared : prepared;
+    if (!claim) { if (this.accessIntentIsCurrent(intent)) { intent.stage = "pending";
+      this.setData({ accessConsent: { ...this.data.accessConsent, stage: "pending", message: "其他定位资源尚未确认结束，请暂不使用并先完成清理。" } }); } return; }
+    const snapshot = intent.snapshot;
+    if (!this.accessIntentIsCurrent(intent)) { this.releaseNavigationMode(claim); return; }
+    let locationSettled = true; // 授权查询不是定位请求；真正提交getLocation前才置false。
+    const request = { claim, timedOut: false, finished: false };
+    this._accessRequest = request;
+    const acknowledge = () => {
+      locationSettled = true;
+      request.sdkSettled = true;
+      if (!request.timedOut) return;
+      request.finished = true;
+      this.releaseNavigationMode(claim);
+      // 只确认资源结束，永不使用迟到坐标或自动启动GPS。
+      if (this.navigationIsCurrent(snapshot)) this.setData({ accessRecoveryMessage: "单次定位请求现已结束。请主动重新发起操作。" });
+    };
     try {
-      const origin = await navigation.locateOnce();
+      const grant = await navigation.authorizeAccess({ isCurrent: () => this.accessIntentIsCurrent(intent), target: snapshot.target,
+        onPrivacyRequired: () => this.waitAccessPrivacy(intent) });
+      if (!this.accessIntentIsCurrent(intent)) return;
+      intent.stage = "locating";
+      this.setData({ accessConsent: { ...this.data.accessConsent, visible: false }, accessRoute: navigation.emptyAccessRoute("locating") });
+      locationSettled = false;
+      const origin = await navigation.locateOnce({ onSettled: acknowledge, grant });
+      locationSettled = true;
       if (!this.navigationIsCurrent(snapshot)) return;
       const identity = { routeId: snapshot.route._id, routeUpdatedAt: snapshot.route.updatedAt,
         waypointId: snapshot.target.id, origin,
         destination: { name: snapshot.target.name, latitude: snapshot.target.latitude, longitude: snapshot.target.longitude } };
       this.setData({ accessRoute: { ...navigation.emptyAccessRoute("planning"), ...identity } });
-      const result = await navigation.planAccessRoute(origin, snapshot.target);
+      intent.stage = "planning";
+      const result = await navigation.planAccessRoute(origin, snapshot.target, grant);
       if (!this.navigationIsCurrent(snapshot)) return;
       const accessRoute = { ...navigation.emptyAccessRoute("success"), ...identity,
         distanceMeters: result.distanceMeters, durationSeconds: result.durationSeconds, points: result.points };
@@ -245,13 +402,27 @@ const definition = {
         accessSummary: { distance: result.distanceMeters === 0 ? "0 m" : formatDistance(result.distanceMeters),
           minutes: Math.ceil(result.durationSeconds / 60) } });
     } catch (error) {
+      // 单次定位超时不证明SDK请求已结束；不让清UI/换路线释放其所有权。
+      if (error.code !== "LOCATION_TIMEOUT") locationSettled = true;
+      request.timedOut = error.code === "LOCATION_TIMEOUT";
       if (!this.navigationIsCurrent(snapshot)) return;
       const fallback = this.data.accessRoute.status === "locating" ? "LOCATION_FAILED" : "CLOUD_CALL_FAILED";
       const code = navigation.errorCode(error, fallback);
       const accessRoute = navigation.emptyAccessRoute(code === "LOCATION_DENIED" ? "permissionDenied" : "error", code);
       this.setData({ accessRoute, ...composeNavigationMap(this.data.mapCenter, accessRoute),
-        accessSummary: { distance: "", minutes: null }, navigationMessage: navigation.errorMessage(code) });
+        accessSummary: { distance: "", minutes: null }, navigationMessage: navigation.errorMessage(code),
+        accessRecoveryMessage: request.timedOut && !locationSettled ? "单次定位已超时，但请求尚未返回。已屏蔽迟到结果；请检查系统定位。收到请求结束回执后可主动重试；若一直无回执，请关闭并重新进入小程序。" : "" });
+    } finally { if (locationSettled) { request.finished = true; this.releaseNavigationMode(claim); }
+      if (this._accessIntent === intent) { this._accessIntent = null;
+        if (!this._unloaded && !this._hidden) this.setData({ accessConsent: { ...this.data.accessConsent, visible: false } }); }
     }
+  },
+
+  onAccessRecoveryTap() {
+    if (this._unloaded || this._hidden) return;
+    const pending = this._accessRequest && !this._accessRequest.finished;
+    this.setData({ accessRecoveryMessage: pending && !this._accessRequest.sdkSettled ? "单次定位请求仍未确认结束，暂不能开始真实循迹或重复定位。请检查系统定位；持续无回执时关闭并重新进入小程序。"
+      : pending ? "单次定位已返回，接驳规划仍在等待；可清除当前显示，旧规划结果将按请求代次隔离。" : "单次定位请求已结束，可主动重试。" });
   },
 
   onClearAccessTap() { this.clearNavigation(); },
@@ -270,6 +441,8 @@ const definition = {
     const session = this._simulationSession;
     this._simulationSession = null;
     if (session) { try { session.dispose(); } catch (_) { /* 不阻断页面离开 */ } }
+    this.releaseNavigationMode(this._simulationModeClaim);
+    this._simulationModeClaim = null;
     if (!this._unloaded) {
       this.setData({ simulationState: emptySimulation() });
       this.updateSimulationMarker(null);
@@ -296,7 +469,7 @@ const definition = {
     if (Object.keys(patch).length) this.setData(patch);
   },
   publishSimulation(snapshot, message = "", visualOnly = false) {
-    if (this._unloaded) return;
+    if (this._unloaded || this._followSession || this._followTransition) return;
     const patch = this.simulationMarkerPatch(snapshot.visualPlayback ? snapshot.visualLocation : snapshot.simulatedLocation);
     if (visualOnly) {
       if (Object.keys(patch).length) this.setData(patch);
@@ -373,6 +546,9 @@ const definition = {
   },
   simulationAction(action) {
     if (this._unloaded || this._hidden || this.data.status !== "success" || this.data.mapRenderError || !this.data.mapCenter) return;
+    if (!this._simulationSession && !["start", "restart"].includes(action)) return;
+    if (!this._simulationModeClaim) this._simulationModeClaim = this.claimNavigationMode("B1_SIMULATION");
+    if (!this._simulationModeClaim) return;
     try {
       if (!this._simulationSession) {
         if (!["start", "restart"].includes(action)) return;
@@ -406,23 +582,98 @@ const definition = {
       remainingText: index.totalTrackMeters <= model.cursorMeters ? "0 m" : formatDistance(index.totalTrackMeters - model.cursorMeters) };
   },
 
-  async onStartFollowTap() { return this.startFollow(false); },
+  async onStartFollowTap() { return this.requestFollowStart(false); },
   async onResumeFollowTap() {
     if (this.data.followState.status !== "paused") return;
-    return this.startFollow(true);
+    return this.requestFollowStart(true);
+  },
+  requestFollowStart(resume) {
+    if (this._unloaded || this._hidden) return;
+    const block = privateFollowBlock();
+    if (block) {
+      this.setData({ followPlatformBlock: block, followState: { ...this.data.followState, status: "blocked", message: block } }); return;
+    }
+    if (this._privacyCheck || this.data.status !== "success" || !this.data.route || !this.data.mapCenter || this.data.mapRenderError) return;
+    // 每次主动开始/继续重新走service隐私和位置授权；同意事件不自动定位。
+    this.setData({ followPlatformBlock: "" });
+    return this.startFollow(resume);
+  },
+  async onCheckFollowPrivacyTap() {
+    if (this._unloaded || this._hidden || this._privacyCheck) return;
+    const route = this.data.route, generation = this._privacyGeneration = (this._privacyGeneration || 0) + 1;
+    const current = () => !this._unloaded && !this._hidden && this.data.route === route && this._privacyGeneration === generation;
+    this._privacyCheck = true;
+    this.setData({ followPrivacyStatus: "checking", followPrivacyMessage: "正在检查隐私授权；不会启动定位。" });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => reject(new Error("PRIVACY_TIMEOUT")), 20000);
+        const end = fn => value => { if (settled) return; settled = true; clearTimeout(timer); fn(value); };
+        this._cancelPrivacyCheck = () => end(reject)(new Error("CANCELLED"));
+        try { wx.getPrivacySetting({ success: end(resolve), fail: end(reject) }); } catch (error) { clearTimeout(timer); reject(error); }
+      });
+      if (!current()) return;
+      if (typeof result.needAuthorization !== "boolean") throw new Error("PRIVACY_UNKNOWN");
+      this.setData({ followPrivacyVisible: result.needAuthorization,
+        followPrivacyContractName: typeof result.privacyContractName === "string" ? result.privacyContractName : "隐私保护指引",
+        followPrivacyStatus: result.needAuthorization ? "required" : "checked",
+        followPrivacyMessage: result.needAuthorization ? "请阅读隐私指引，可选择同意或暂不使用。" : "接口返回无需新增同意；这不能证明后台声明、准入已核验。私人测试请主动点击开始，仍会重新检查授权。" });
+    } catch (_) { if (current()) this.setData({ followPrivacyStatus: "error", followPrivacyMessage: "无法确认隐私授权，请更新微信或稍后主动重试；未启动定位。" }); }
+    finally { this._privacyCheck = false; this._cancelPrivacyCheck = null; }
+  },
+  async onRetryNativeCleanupTap() {
+    if (this._unloaded || this._hidden || this._nativeRetryWaiting) return;
+    this._nativeRetryWaiting = true;
+    const route = this.data.route;
+    this.setData({ nativeRecoveryMessage: "正在确认路线速览清理，不会自动启动定位…" });
+    const error = await new Promise(resolve => this.retryNativeOverviewCleanup(resolve));
+    this._nativeRetryWaiting = false;
+    if (this._unloaded || this._hidden || this.data.route !== route) return;
+    this.setData({ nativeRecoveryMessage: error ? "路线速览尚未确认停止。可再次检查清理；若一直失败，请关闭并重新进入小程序。真实GPS保持阻断。" : "路线速览清理已确认。需要定位时请主动点击开始；平台准入仍须核实。" });
+  },
+  followMarkerPatch(location) {
+    const markers = this.data.mapMarkers || [], i = markers.findIndex(m => m.id === -1);
+    if (!location) return i < 0 ? {} : { mapMarkers: markers.filter(m => m.id !== -1) };
+    if (i < 0) return { mapMarkers: [...markers, { id: -1, latitude: location.latitude, longitude: location.longitude,
+      iconPath: "/assets/map/location.png", width: 24, height: 24, anchor: { x: 0.5, y: 0.5 }, zIndex: 10 }] };
+    return markers[i].latitude === location.latitude && markers[i].longitude === location.longitude ? {}
+      : { [`mapMarkers[${i}].latitude`]: location.latitude, [`mapMarkers[${i}].longitude`]: location.longitude };
   },
   async startFollow(resume) {
     if (this._unloaded || this._hidden || this.data.status !== "success" || !this.data.mapCenter
       || this.data.mapRenderError || this._followSession || this.data.nativeNavigation.status === "opening") return;
+    if (this._followTransition || this._navigationTransition) return;
+    if (this._simulationSession && this._simulationSession.getSnapshot().playbackStatus === "playing") {
+      this.setData({ followState: { ...this.data.followState, message: "请先暂停模拟演示，再主动开始真实循迹。" } }); return;
+    }
+    // 暂停的B1不再推进，但其Marker必须先移除；Native则须等待异步remove确认。
+    if (this._simulationSession) this.disposeSimulation();
+    const claim = this.claimNavigationMode("REAL_FOLLOW");
+    if (!claim) { this.setData({ followState: { ...this.data.followState, message: "其他定位请求或地图资源尚未释放，请先结束或确认清理。" } }); return; }
+    this._realModeClaim = claim;
+    const expectedRoute = this.data.route, expectedVersion = this._followVersion;
+    this._followTransition = true;
+    try {
+      if (typeof this.stopNativeOverview === "function") {
+        const error = await new Promise(resolve => this.stopNativeOverview(resolve));
+        if (error) { this.releaseNavigationMode(claim); this._realModeClaim = null;
+          if (!this._unloaded && !this._hidden) this.setData({ nativeRecoveryMessage: "上一次地图路线速览尚未确认停止。请重试清理后再开始真实循迹。" }); return; }
+      }
+      if (this._hidden || this._unloaded || this.data.route !== expectedRoute || this._followVersion !== expectedVersion) {
+        this.releaseNavigationMode(claim); return;
+      }
+    } finally { this._followTransition = false; }
     const route = this.data.route;
     if (!resume) { this._trailIndex = progress.buildTrailIndex(route); this._trailModel = progress.createProgressState(this._trailIndex); }
     else this._trailModel = progress.resumeProgressState(this._trailIndex, this._trailModel);
     if (!this._trailIndex || this._trailIndex.status !== "ready") {
+      this.releaseNavigationMode(claim);
       this.setData({ followState: { ...emptyFollow(), status: "error", message: "路线资料暂不支持循迹计算，原路线仍可查看。" } }); return;
     }
     this.clearNavigation();
     const version = this._followVersion = (this._followVersion || 0) + 1;
-    const current = () => !this._unloaded && !this._hidden && version === this._followVersion && route === this.data.route;
+    const current = () => !this._unloaded && !this._hidden && version === this._followVersion && route === this.data.route
+      && navigationClaims.has(claim);
     const session = trailFollow.createSession({
       onLocation: location => {
         if (!current()) return;
@@ -445,8 +696,7 @@ const definition = {
             location: visible ? location : null, quality: result.locationQuality, qualityText: qualityText(result.locationQuality), offRouteStatus: result.offRouteStatus,
             accuracyText: location.accuracy === null ? "精度未知" : `约${Math.ceil(location.accuracy)}米`, updatedText: time,
             message },
-            mapMarkers: visible ? [...this.data.mapCenter.markers, { id: -1, latitude: location.latitude, longitude: location.longitude,
-              iconPath: "/assets/map/location.png", width: 24, height: 24, anchor: { x: 0.5, y: 0.5 }, zIndex: 10 }] : this.data.mapCenter.markers });
+            ...this.followMarkerPatch(visible ? location : null) });
           if (this.data.followCamera) {
             if (confirmed && result.locationQuality === "reliable") this.onFollowRecenterTap();
             else this.setData({ followCamera: false });
@@ -460,6 +710,7 @@ const definition = {
     try {
       await session.start();
       if (!current()) return;
+      if (["starting", "resuming"].includes(this.data.followState.status)) this.setData({ followState: { ...this.data.followState, message: "正在获取真实位置，等待起点或原路段确认…" } });
       if (this.data.followState.status !== "following") {
         this._followFixTimer = setTimeout(() => { if (current()) this.failFollow({ code: "TIMEOUT" }); }, 20000);
       }
@@ -509,9 +760,11 @@ const definition = {
       canComplete: false, status: target, message: target === "paused" ? "循迹已暂停，返回前台后需主动继续。" : target === "ended" ? "循迹已结束，未记录位置历史。" : "" };
     if (!this._unloaded) this.setData({ followState: { ...finalState, status: session ? "stopping" : target },
       followCamera: false, followPrivacyVisible: false, mapMarkers: this.data.mapCenter ? this.data.mapCenter.markers : [] });
-    if (!session) return true;
+    if (!session) { this.releaseNavigationMode(this._realModeClaim); this._realModeClaim = null; return true; }
     try {
       await session.stop();
+      this.releaseNavigationMode(this._realModeClaim);
+      this._realModeClaim = null;
       if (this._followSession === session) this._followSession = null;
       if (!this._unloaded && version === this._followVersion) this.setData({ followState: finalState });
       return true;
@@ -523,9 +776,19 @@ const definition = {
 
   onPauseFollowTap() { return this.stopFollow("paused"); },
   onStopFollowTap() { return this.stopFollow(this.data.followState.cleanupPending ? this._followStopTarget : "ended"); },
-  onFollowPrivacyAgree() { this.setData({ followPrivacyVisible: false }); return this._privacyResume ? this.onResumeFollowTap() : this.onStartFollowTap(); },
-  onFollowPrivacyCancel() { this.setData({ followPrivacyVisible: false }); },
-  onFollowPrivacyView() { if (typeof wx.openPrivacyContract === "function") wx.openPrivacyContract({ fail() {} }); },
+  onFollowPrivacyAgree(event) {
+    // 仅绑定官方agreePrivacyAuthorization事件；阅读指引和普通tap都不视作同意。
+    if (this._unloaded || this._hidden || !this.data.followPrivacyVisible || !event || event.type !== "agreeprivacyauthorization") return;
+    this.setData({ followPrivacyVisible: false, followPrivacyStatus: "agreed", followPrivacyMessage: "已收到微信隐私同意事件，尚未启动GPS。请主动点击开始或继续，届时重新检查隐私和定位权限。" });
+  },
+  onFollowPrivacyCancel() { if (this._cancelPrivacyCheck) this._cancelPrivacyCheck(); this._privacyGeneration = (this._privacyGeneration || 0) + 1;
+    this.setData({ followPrivacyVisible: false, followPrivacyStatus: "declined", followPrivacyMessage: "您已暂不授权，未启动定位。可继续查看地图。" }); },
+  onFollowPrivacyView() {
+    if (this._unloaded || this._hidden) return;
+    const route = this.data.route;
+    const fail = () => { if (!this._unloaded && !this._hidden && this.data.route === route) this.setData({ followPrivacyMessage: "无法打开隐私指引，请更新微信或检查公众平台隐私配置；未启动定位。" }); };
+    try { wx.openPrivacyContract({ fail }); } catch (_) { fail(); }
+  },
   onFollowCameraTap() {
     if (this.data.followCamera) { this.setData({ followCamera: false }); return; }
     const state = this.data.followState;
@@ -586,13 +849,20 @@ const definition = {
   },
 
   onBackTap() {
+    this.clearNavigation();
     this.disposeSimulation();
-    wx.navigateBack({
+    const back = () => wx.navigateBack({
       delta: 1,
       fail() {
         wx.redirectTo({ url: "/pages/routes/index" });
       }
     });
+    if (this._backPending) return this._backPending;
+    if (!this._followSession && !this._followTransition) return back();
+    this._backPending = this.stopFollow("paused").then(stopped => {
+      if (stopped && !this._hidden && !this._unloaded) back();
+    }).finally(() => { this._backPending = null; });
+    return this._backPending;
   }
 };
 Page(routeOverview.install(definition,wx,"ROUTE-OVERVIEW-v0.2"));

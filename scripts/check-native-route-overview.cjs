@@ -209,4 +209,51 @@ test('Task5C production Page activation isolated010 and adapter hide cancels can
  const def={loadRoute:async function(){},onSimulationStartTap(){},onSimulationPauseTap(){},onSimulationResumeTap(){},onSimulationRestartTap(){},onHide(){this._hidden=true;},onUnload(){this._unloaded=true;},onBackTap(){},onMapError(){}};api.install(def,wx,'TEST_NEGATIVE_CONTROL');const page={...def,data:{route:r,status:'success'},setData(p){Object.assign(this.data,p);}};
  page.onSimulationStartTap({currentTarget:{dataset:{}}});if(r===taimushan)assert.equal(page.getPlanBSummary().strictEndpointFallbackEnabled,true);else assert.equal(page.getPlanBSummary().strictEndpointFallbackEnabled,false);const old=moves.at(-1);page.onHide();old.success();old.complete();page.onNativeOverviewPoint({detail:{...old.path.at(-1),markerId:-2,animationStatus:'interpolating'}});assert.equal(page.getPlanBSummary().completedSegments,0);assert.equal(removed.length,1);page.onUnload();}
 });
+test('Day2 adapter cleanup ACK is shared across stop/hide; late remove success cannot restart',()=>{
+ const timers=new Set(),removes=[],moves=[],answers=[];
+ const clock={setTimeout(fn,ms){const t={fn,ms};timers.add(t);return t;},clearTimeout(t){timers.delete(t);}};
+ const wx={createMapContext(){return {addMarkers(o){o.success();},moveAlong(o){moves.push(o);},removeMarkers(o){removes.push(o);}};}};
+ const mod={exports:{}};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../miniprogram/utils/native-route-overview.js'),'utf8'),{module:mod,require:()=>core,...clock,Date});
+ const def={loadRoute:async function(){},onSimulationStartTap(){},onSimulationPauseTap(){},onSimulationResumeTap(){},onSimulationRestartTap(){},onHide(){this._hidden=true;},onUnload(){this._unloaded=true;},onBackTap(){},onMapError(){}};
+ mod.exports.install(def,wx,'DAY2_NODE_ONLY');const p={...def,data:{route,status:'success'},setData(patch){Object.assign(this.data,patch);}};
+ p.onSimulationStartTap();p.stopNativeOverview(e=>answers.push(e));p.stopNativeOverview(e=>answers.push(e));p.onHide();assert.equal(removes.length,1);assert.equal(answers.length,0);
+ removes[0].success();assert.deepEqual(answers,[null,null]);assert.equal(moves.length,1);assert.equal(timers.size,0);assert.equal(p._nativeCleanup,null);
+});
+test('Day2 adapter cleanup timeout/failure never announces successful removal',()=>{
+ for(const outcome of ['fail','timeout']){const timers=new Set(),removes=[],answers=[];const mod={exports:{}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../miniprogram/utils/native-route-overview.js'),'utf8'),{module:mod,require:()=>core,Date,setTimeout(fn,ms){const t={fn,ms};timers.add(t);return t;},clearTimeout(t){timers.delete(t);}});
+ const wx={createMapContext(){return {addMarkers(o){o.success();},moveAlong(){},removeMarkers(o){removes.push(o);}};}};
+ const def={loadRoute:async function(){},onSimulationStartTap(){},onSimulationPauseTap(){},onSimulationResumeTap(){},onSimulationRestartTap(){},onHide(){},onUnload(){},onBackTap(){},onMapError(){}};
+ mod.exports.install(def,wx,'DAY2_NODE_ONLY');const p={...def,data:{route,status:'success'},setData(patch){Object.assign(this.data,patch);}};p.onSimulationStartTap();p.stopNativeOverview(e=>answers.push(e));
+ if(outcome==='fail')removes[0].fail();else{const timer=[...timers].find(t=>t.ms===1500);timers.delete(timer);timer.fn();}
+ assert.equal(answers.length,1);assert.equal(answers[0],outcome==='fail'?'NATIVE_REMOVE_FAILED':'NATIVE_REMOVE_TIMEOUT');assert(p._nativeCleanup);
+ if(outcome==='timeout'){removes[0].success();assert.equal(answers.length,1,'late ACK is not a second success notification');assert.equal(p._nativeCleanup,null);}
+ }
+});
+
+test('Day3 actual retry remove ACK only; duplicate and old ACK cannot clear newer resource',()=>{
+ const timers=new Set(),removes=[],answers=[];const mod={exports:{}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../miniprogram/utils/native-route-overview.js'),'utf8'),{module:mod,require:()=>core,Date,setTimeout(fn,ms){const t={fn,ms};timers.add(t);return t;},clearTimeout(t){timers.delete(t);}});
+ const wx={createMapContext(){return {addMarkers(o){o.success();},moveAlong(){},removeMarkers(o){removes.push(o);}};}};
+ const def={loadRoute:async function(){},onSimulationStartTap(){},onSimulationPauseTap(){},onSimulationResumeTap(){},onSimulationRestartTap(){},onHide(){},onUnload(){},onBackTap(){},onMapError(){}};
+ mod.exports.install(def,wx,'DAY3_NODE_ONLY');const p={...def,data:{route,status:'success'},setData(q){Object.assign(this.data,q);}};
+ p.onSimulationStartTap();p.stopNativeOverview(e=>answers.push(e));removes[0].fail();assert.equal(answers[0],'NATIVE_REMOVE_FAILED');
+ p.retryNativeOverviewCleanup(e=>answers.push(e));assert.equal(removes.length,2);assert(p._nativeCleanup);
+ const pendingRetry=p._nativeCleanup;removes[0].success();assert.equal(p._nativeCleanup,pendingRetry,'old duplicate ACK cannot release an in-flight retry');
+ p.retryNativeOverviewCleanup(e=>answers.push(e));assert.equal(removes.length,2);assert.equal(answers.at(-1),'NATIVE_REMOVE_PENDING');
+ removes[1].success();assert.equal(p._nativeCleanup,null);assert.equal(answers.at(-1),null);
+ p.onSimulationStartTap();p.stopNativeOverview(()=>{});const newer=p._nativeCleanup;removes[0].success();removes[1].success();assert.equal(p._nativeCleanup,newer);
+ removes[2].success();assert.equal(p._nativeCleanup,null);assert.equal(timers.size,0);
+});
+test('Day3 pending remove timeout is not cancellation; retry never overlaps in-flight SDK remove',()=>{
+ const timers=new Set(),removes=[],answers=[];const mod={exports:{}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../miniprogram/utils/native-route-overview.js'),'utf8'),{module:mod,require:()=>core,Date,setTimeout(fn,ms){const t={fn,ms};timers.add(t);return t;},clearTimeout(t){timers.delete(t);}});
+ const wx={createMapContext(){return {addMarkers(o){o.success();},moveAlong(){},removeMarkers(o){removes.push(o);}};}};
+ const def={loadRoute:async function(){},onSimulationStartTap(){},onSimulationPauseTap(){},onSimulationResumeTap(){},onSimulationRestartTap(){},onHide(){},onUnload(){},onBackTap(){},onMapError(){}};
+ mod.exports.install(def,wx,'DAY3_NODE_ONLY');const p={...def,data:{route,status:'success'},setData(q){Object.assign(this.data,q);}};
+ p.onSimulationStartTap();p.stopNativeOverview(e=>answers.push(e));const timer=[...timers].find(t=>t.ms===1500);timers.delete(timer);timer.fn();
+ p.retryNativeOverviewCleanup(e=>answers.push(e));assert.equal(removes.length,1);assert.equal(answers.at(-1),'NATIVE_REMOVE_TIMEOUT');
+ removes[0].fail();p.retryNativeOverviewCleanup(e=>answers.push(e));assert.equal(removes.length,2);removes[1].fail();assert(p._nativeCleanup);assert.equal(p._nativeCleanup.pending,false);
+ p.retryNativeOverviewCleanup(e=>answers.push(e));removes[2].success();assert.equal(p._nativeCleanup,null);assert.equal(timers.size,0);
+});
 console.log(JSON.stringify({result:'LOCAL_NATIVE_CALLBACK_LOGIC_PASS',cases,sourcePoints:route.track.length,segments:16,nodeControlledMs:15504,maxBoundaryErrorMeters:maxBoundaryError,devtools:'PENDING',boundaryPause:'USER_ACCEPTED_RETEST_PENDING'},null,2));

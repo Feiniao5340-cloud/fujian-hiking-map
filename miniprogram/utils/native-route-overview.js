@@ -109,19 +109,50 @@ function enabledRoute(route){return !!getOverviewConfig(route);}
 function install(definition,wx,runId){
  function applicable(page){return enabledRoute(page.data.route);}
  function publish(page,s){if(page._unloaded||page._hidden)return;page.setData({overviewState:{status:s.status,text:({idle:'尚未开始',starting:'正在创建原生动画',playing:'路线速览播放中',pausing:'正在暂停：当前短段走完即停',paused:'已暂停',finished:s.pathMode==='RAW_7035_CAPABILITY_SAMPLE'?'3秒原生样本结束（非最终验收）':'路线速览完成',error:'路线速览暂不可用，请重新播放'}[s.status]||'已停止'),message:s.lastError||'',raw:s.pathMode==='RAW_7035_CAPABILITY_SAMPLE'}});}
- function stop(page){page._nativeOverviewVersion=(page._nativeOverviewVersion||0)+1;if(page._nativeCleanupTimer!=null){clearTimeout(page._nativeCleanupTimer);page._nativeCleanupTimer=null;}const session=page._nativeOverview;page._nativeOverview=null;if(session){session.dispose();page._nativeOverviewLast=session.getSnapshot();}}
+ // Adapter-only cleanup ACK. Geometry and the animation state machine above are unchanged.
+ function stop(page,done){
+  page._nativeOverviewVersion=(page._nativeOverviewVersion||0)+1;
+  if(page._nativeCleanup){const c=page._nativeCleanup;if(done){if(c.error)done(c.error);else c.waiters.push(done);}return;}
+  const session=page._nativeOverview;page._nativeOverview=null;
+  if(!session){if(page.releaseNavigationMode)page.releaseNavigationMode(page._nativeModeClaim);page._nativeModeClaim=null;if(done)done(null);return;}
+  const c={waiters:done?[done]:[],error:null,pending:true,context:page._nativeMapContext};page._nativeCleanup=c;
+  function settle(error){const waiters=c.waiters.splice(0);for(const notify of waiters)notify(error);}
+  page._nativeCleanupTimer=setTimeout(()=>{page._nativeCleanupTimer=null;c.error='NATIVE_REMOVE_TIMEOUT';settle(c.error);},1500);
+  session.dispose(error=>{if(c.initialAcknowledged||page._nativeCleanup!==c)return;c.initialAcknowledged=true;if(page._nativeCleanupTimer!=null)clearTimeout(page._nativeCleanupTimer);page._nativeCleanupTimer=null;
+   c.pending=false;c.error=error||null;
+   if(!error){page._nativeCleanup=null;if(page.releaseNavigationMode)page.releaseNavigationMode(page._nativeModeClaim);page._nativeModeClaim=null;}
+   settle(error||null);
+  });page._nativeOverviewLast=session.getSnapshot();
+ }
+ definition.stopNativeOverview=function(done){stop(this,done);};
+ // 只能在上次remove已明确失败后重新发出真实remove；超时但无回执时不重复提交。
+ definition.retryNativeOverviewCleanup=function(done){
+  const page=this,c=page._nativeCleanup;
+  if(!c){stop(page,done);return;}
+  if(c.pending){if(done)done(c.error||'NATIVE_REMOVE_PENDING');return;}
+  if(!c.context||typeof c.context.removeMarkers!=='function'){if(done)done('NATIVE_REMOVE_UNAVAILABLE');return;}
+  c.pending=true;c.error=null;if(done)c.waiters.push(done);
+  let acknowledged=false;
+  const settle=error=>{for(const notify of c.waiters.splice(0))notify(error);};
+  const timer=setTimeout(()=>{c.error='NATIVE_REMOVE_TIMEOUT';settle(c.error);},1500);
+  const ack=error=>{if(acknowledged)return;acknowledged=true;clearTimeout(timer);c.pending=false;c.error=error;
+   if(page._nativeCleanup!==c)return;
+   if(!error){page._nativeCleanup=null;if(page.releaseNavigationMode)page.releaseNavigationMode(page._nativeModeClaim);page._nativeModeClaim=null;}
+   settle(error);
+  };
+  try{c.context.removeMarkers({markerIds:[MARKER_ID],success:()=>ack(null),fail:()=>ack('NATIVE_REMOVE_FAILED')});}catch(_){ack('NATIVE_REMOVE_FAILED');}
+ };
  const load=definition.loadRoute;definition.loadRoute=async function(...args){stop(this);const pending=load.apply(this,args),version=this._loadVersion;const result=await pending;if(!this._unloaded&&version===this._loadVersion)this.setData({overviewMode:applicable(this),overviewState:{status:'idle',text:'尚未开始',message:'',raw:false}});return result;};
  function begin(page,raw=false,firstSegmentOnly=false){if(page._hidden||page._unloaded||page.data.mapRenderError||page.data.status!=='success')return;
- const clickedAt=Date.now(),route=page.data.route,previous=page._nativeOverview;page._nativeOverview=null;
- const v=page._nativeOverviewVersion=(page._nativeOverviewVersion||0)+1;
- if(page._nativeCleanupTimer!=null){clearTimeout(page._nativeCleanupTimer);page._nativeCleanupTimer=null;}
+ if(page.claimNavigationMode){const guard=page.claimNavigationMode('NATIVE_OVERVIEW');if(!guard)return;if(page._nativeModeClaim)page.releaseNavigationMode(guard);else page._nativeModeClaim=guard;}
+ const clickedAt=Date.now(),route=page.data.route;
+ const v=(page._nativeOverviewVersion||0)+1;
  const current=()=>!page._hidden&&!page._unloaded&&page._nativeOverviewVersion===v&&page.data.route===route;
- const launch=()=>{if(!current())return;try{const ctx=wx.createMapContext('route-map',page);page._nativeOverview=create(route,ctx,{raw,runId,clickedAt,firstSegmentOnly,strictEndpointFallback:route._id==='fj-route-010',onState:s=>publish(page,s)});page._nativeOverview.start();}
+ const launch=()=>{if(!current())return;
+  if(page.claimNavigationMode&&!page._nativeModeClaim){page._nativeModeClaim=page.claimNavigationMode('NATIVE_OVERVIEW');if(!page._nativeModeClaim)return;}
+  try{const ctx=wx.createMapContext('route-map',page);page._nativeMapContext=ctx;page._nativeOverview=create(route,ctx,{raw,runId,clickedAt,firstSegmentOnly,strictEndpointFallback:route._id==='fj-route-010',onState:s=>publish(page,s)});page._nativeOverview.start();}
  catch(e){page._nativeOverviewLast={runId,source:'ROUTE_OVERVIEW',status:'error',errorCode:e.message};publish(page,{status:'error',lastError:e.message});}};
- if(!previous){launch();return;}
- const timer=setTimeout(()=>{if(current()){page._nativeCleanupTimer=null;page._nativeOverviewVersion++;publish(page,{status:'error',lastError:'NATIVE_REMOVE_TIMEOUT'});}},1500);page._nativeCleanupTimer=timer;
- previous.dispose(error=>{clearTimeout(timer);if(page._nativeCleanupTimer===timer)page._nativeCleanupTimer=null;if(!current())return;if(error)publish(page,{status:'error',lastError:error});else launch();});
- page._nativeOverviewLast=previous.getSnapshot();
+ stop(page,error=>{if(!current())return;if(error){page._nativeOverviewVersion++;publish(page,{status:'error',lastError:error});}else launch();});
  }
  for(const [name,action] of [['onSimulationStartTap','start'],['onSimulationPauseTap','pause'],['onSimulationResumeTap','resume'],['onSimulationRestartTap','restart']]){
   const old=definition[name];definition[name]=function(event){if(!applicable(this))return old.call(this,event);

@@ -24,10 +24,10 @@ const commands = [
   ['scripts/check-trail-simulation-performance.cjs'],
   ['scripts/check-native-route-overview.cjs']
 ];
-const scriptFiles = [...new Set(commands.map(c=>c[0])), 'scripts/formal-route-fixtures.cjs',
+const scriptFiles = [...new Set(commands.map(c=>c[0])), 'scripts/formal-route-fixtures.cjs', 'scripts/access-consent-fixtures.cjs', 'scripts/text-integrity.cjs',
   'scripts/gpx-to-track.cjs','scripts/prepare-gpx-route.cjs','scripts/prepare-gpx-route.ps1','scripts/check-public-routes.cjs'];
 const sourceFiles = ['project.config.json', 'miniprogram/app.js','miniprogram/app.json','miniprogram/app.wxss','miniprogram/sitemap.json',
-  'miniprogram/config/env.js', 'miniprogram/services/route-service.js','miniprogram/services/navigation-service.js',
+  'miniprogram/config/env.js', 'miniprogram/config/access-privacy.js', 'miniprogram/services/route-service.js','miniprogram/services/navigation-service.js',
   'miniprogram/services/trail-follow-service.js','miniprogram/utils/format.js','miniprogram/utils/map-data.js',
   'miniprogram/utils/trail-progress.js','miniprogram/utils/trail-simulator.js','miniprogram/utils/native-route-overview.js', ...['home','routes','route-detail'].flatMap(p=>['js','json','wxml','wxss'].map(ext=>`miniprogram/pages/${p}/index.${ext}`)),
   ...['start','waypoint','location','simulation'].map(n=>`miniprogram/assets/map/${n}.png`),

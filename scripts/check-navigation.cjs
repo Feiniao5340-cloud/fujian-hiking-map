@@ -1,3 +1,4 @@
+const { APPROVED_ACCESS, consentEvent, startAccess } = require('./access-consent-fixtures.cjs');
 // 运行真实 Page、Navigation Service 与云函数；所有微信、数据库、高德调用均为本地模拟。
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -10,6 +11,8 @@ const read = p => fs.readFileSync(path.join(root, p), "utf8");
 const { routeById } = require("./formal-route-fixtures.cjs");
 const route = routeById("fj-route-005");
 const secondRoute = routeById("fj-route-006");
+const { textHash, checkTextIntegrityNegatives } = require('./text-integrity.cjs');
+checkTextIntegrityNegatives();
 const originalHash = crypto.createHash("sha256").update(read("data/routes/xiamen-loop.json")).digest("hex");
 const env = require(path.join(root, "miniprogram/config/env"));
 const testAppId = require(path.join(root, "project.config.json")).appid;
@@ -36,10 +39,10 @@ function client() {
   let currentRoute = route;
   const timers = [];
   const calls = { location: [], native: [], cloud: [], back: 0 };
-  const wx = { navigateBack() { calls.back++; }, redirectTo() {}, getLocation(o) { calls.location.push(o); }, openLocation(o) { calls.native.push(o); },
+  const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); }, navigateBack() { calls.back++; }, redirectTo() {}, getLocation(o) { calls.location.push(o); }, openLocation(o) { calls.native.push(o); },
     cloud: { callFunction(o) { assert.equal(o.config.env, env.cloudEnvId); calls.cloud.push(o); } } };
   const module = { exports: {} };
-  vm.runInNewContext(read("miniprogram/services/navigation-service.js"), { module, wx, require: () => env,
+  vm.runInNewContext(read("miniprogram/services/navigation-service.js"), { module, wx, require: name => name.includes('access-privacy') ? APPROVED_ACCESS : env,
     setTimeout(fn) { const timer = { fn, active: true }; timers.push(timer); return timer; }, clearTimeout(t) { t.active = false; } });
   const service = module.exports;
   let definition;
@@ -129,8 +132,8 @@ async function run() {
     const response = { success: true, distanceMeters: 215, durationSeconds: 172,
       points: [origin, { latitude: selected.latitude, longitude: selected.longitude }] };
     const begin = async target => {
-      const pending = target.page.onPlanAccessTap();
-      assert.equal(target.page.data.accessRoute.status, "locating");
+      const pending = startAccess(target.page);
+      await tick(); assert.equal(target.page.data.accessRoute.status, "locating");
       assert.equal(target.calls.location.at(-1).type, "gcj02");
       target.calls.location.at(-1).success({ ...origin, accuracy: 3 }); await tick();
       assert.equal(target.page.data.accessRoute.status, "planning");
@@ -143,7 +146,7 @@ async function run() {
     };
     // 1 正常规划：同一map中独立两条线；只发送origin/destination。
     const plan = await begin(c);
-    const calls = c.calls.cloud.length; await c.page.onPlanAccessTap(); assert.equal(c.calls.cloud.length, calls);
+    const calls = c.calls.cloud.length; await startAccess(c.page); assert.equal(c.calls.cloud.length, calls);
     assert.equal(Object.keys(plan.call.data).sort().join(','), 'destination,origin');
     assert.equal(JSON.stringify(plan.call.data.destination), JSON.stringify({ latitude: selected.latitude, longitude: selected.longitude }));
     plan.call.success({ result: response }); await plan.pending;
@@ -183,8 +186,8 @@ async function run() {
     // 5 定位拒绝/失败/超时：不发云请求，原详情仍可用。
     for (const [message, status] of [["getLocation:fail auth deny", "permissionDenied"],
       ["getLocation:fail unavailable", "error"], ["getLocation:fail timeout", "error"]]) {
-      const count = c.calls.cloud.length; const pending = c.page.onPlanAccessTap();
-      c.calls.location.at(-1).fail({ errMsg: message }); await pending;
+      const count = c.calls.cloud.length; const pending = startAccess(c.page);
+      await tick(); c.calls.location.at(-1).fail({ errMsg: message }); await pending;
       assert.equal(c.calls.cloud.length, count); assert.equal(c.page.data.accessRoute.status, status); assertTrail(c);
     }
     const retry = await begin(c); retry.call.success({ result: response }); await retry.pending;
@@ -197,7 +200,7 @@ async function run() {
     assert.equal(reopened.page.data.selectedWaypoint, null); assert.equal(reopened.calls.location.length, 0); assertTrail(reopened);
     // 定位中换目标：迟到位置不发云；规划中换目标/换Route/隐藏/退出/清除：迟到响应不回写。
     const locating = client(); await locating.page.onLoad({ id: route._id }); locating.select(selected.id);
-    const loc = locating.page.onPlanAccessTap(); locating.select(route.waypoints[1].id);
+    const loc = startAccess(locating.page); await tick(); locating.select(route.waypoints[1].id);
     locating.calls.location[0].success(origin); await loc; assert.equal(locating.calls.cloud.length, 0);
     for (const phase of ["target", "route", "hide", "unload", "clear"]) {
       const n = client(); await n.page.onLoad({ id: route._id }); n.select(selected.id); const pending = await begin(n);
@@ -230,7 +233,7 @@ async function run() {
     const hardening = [];
     const target = async () => { const n = client(); await n.page.onLoad({ id: route._id }); n.select(selected.id); return n; };
     const record = (id, name) => hardening.push({ id, name, result: "LOCAL_PASS" });
-    const n1 = client(); await n1.page.onLoad({ id: route._id }); await n1.page.onPlanAccessTap();
+    const n1 = client(); await n1.page.onLoad({ id: route._id }); await startAccess(n1.page);
     assert.equal(n1.calls.location.length, 0); assert.equal(n1.calls.cloud.length, 0);
     assert(n1.page.data.navigationMessage.includes("请先选择")); assertTrail(n1);
     assert(template.includes('wx:if="{{navigationMessage && !selectedWaypoint}}"'), "无卡片时也必须显示目标错误提示");
@@ -238,20 +241,20 @@ async function run() {
     for (const point of [{ latitude: NaN }, { longitude: Infinity }, { latitude: "24" },
       { latitude: 91 }, { longitude: 181 }, { latitude: 0, longitude: 0 }]) {
       const n2 = await target(); n2.page.setData({ selectedWaypoint: { ...n2.page.data.selectedWaypoint, ...point } });
-      await n2.page.onPlanAccessTap(); assert.equal(n2.calls.location.length, 0);
+      await startAccess(n2.page); assert.equal(n2.calls.location.length, 0);
       assert.equal(n2.calls.cloud.length, 0); assert(n2.page.data.navigationMessage); assertTrail(n2);
     }
     record(2, "节点坐标非法");
-    const n3 = await target(); const three = n3.page.onPlanAccessTap();
-    await n3.page.onPlanAccessTap(); await n3.page.onPlanAccessTap(); assert.equal(n3.calls.location.length, 1);
+    const n3 = await target(); const three = startAccess(n3.page);
+    await startAccess(n3.page); await startAccess(n3.page); await tick(); assert.equal(n3.calls.location.length, 1);
     n3.calls.location[0].fail({ errMsg: "fail" }); await three; assertTrail(n3); record(3, "定位中重复点击");
     const n4 = await target(); const four = await begin(n4);
-    await n4.page.onPlanAccessTap(); await n4.page.onPlanAccessTap();
+    await startAccess(n4.page); await startAccess(n4.page);
     assert.equal(n4.calls.cloud.length, 1); assert.equal(n4.calls.location.length, 1);
     four.call.success({ result: response }); await four.pending; assert.equal(n4.page.data.mapPolylines.length, 2);
     record(4, "云请求中重复点击");
     for (const [id, message, status] of [[5, "location unavailable", "error"], [6, "getLocation:fail auth deny", "permissionDenied"]]) {
-      const n = await target(); const pending = n.page.onPlanAccessTap(); n.calls.location[0].fail({ errMsg: message }); await pending;
+      const n = await target(); const pending = startAccess(n.page); await tick(); n.calls.location[0].fail({ errMsg: message }); await pending;
       assert.equal(n.page.data.accessRoute.status, status); assert.equal(n.calls.cloud.length, 0);
       assert(n.page.data.navigationMessage); assertTrail(n); record(id, id === 5 ? "定位失败" : "拒绝授权");
     }
@@ -300,16 +303,23 @@ async function run() {
   const api = client();
   const origin = { ...fixedRequest.origin, accuracy: 7 };
   const destination = { ...fixedRequest.destination, name: fixedWaypoint.name, id: fixedWaypoint.id };
-  const call = api.service.planAccessRoute(origin, destination);
+  async function thinRequest() {
+    // 原薄服务契约回归现在也显式经过本次授权和新鲜定位；仍只发送两组坐标。
+    const grant = await api.service.authorizeAccess({ isCurrent: () => true, target: destination });
+    const locating = api.service.locateOnce({ grant }); api.calls.location.at(-1).success(origin);
+    const fresh = await locating;
+    return { pending: api.service.planAccessRoute(fresh, destination, grant) };
+  }
+  const { pending: call } = await thinRequest();
   assert.deepEqual(JSON.parse(JSON.stringify(api.calls.cloud[0].data)), fixedRequest);
   api.calls.cloud[0].success({ result: { success: true, distanceMeters: 10, durationSeconds: 20,
     points: [fixedRequest.origin, fixedRequest.destination], raw: "must not escape" } });
   const business = await call; assert.equal(business.success, true); assert.equal(business.raw, undefined);
-  const failed = api.service.planAccessRoute(origin, destination);
+  const { pending: failed } = await thinRequest();
   api.calls.cloud[1].success({ result: { success: false, errorCode: "RATE_LIMITED", message: "untrusted text" } });
   await assert.rejects(failed, error => error.code === "RATE_LIMITED");
   await assert.rejects(api.service.planAccessRoute({ latitude: "24", longitude: 118 }, destination), error => error.code === "INVALID_COORDINATES");
-  const malformed = api.service.planAccessRoute(origin, destination);
+  const { pending: malformed } = await thinRequest();
   api.calls.cloud[2].success({ result: { success: true, distanceMeters: "10", durationSeconds: 20, points: [] } });
   await assert.rejects(malformed, error => error.code === "INVALID_RESPONSE");
   const s = server();
@@ -429,7 +439,7 @@ async function run() {
   }
   globalLimit.setContext({ OPENID: "user-last", APPID: testAppId, SOURCE: "wx_client" });
   assert.equal((await globalLimit.main(request)).errorCode, "RATE_LIMITED"); assert.equal(globalLimit.requests.length, 200);
-  assert.equal(originalHash, "06f5a5b111b011d0bb1c5966f3bcf5881f285a185103c8c69f005f12a6141fce");
+  assert.equal(textHash(fs.readFileSync(path.join(root, "data/routes/xiamen-loop.json"))), "06f5a5b111b011d0bb1c5966f3bcf5881f285a185103c8c69f005f12a6141fce");
   assert.equal(crypto.createHash("sha256").update(read("data/routes/xiamen-loop.json")).digest("hex"), originalHash);
   const source = read("cloudfunctions/planAccessRoute/index.js");
   assert(!/console\.(log|info|error)\s*\(/.test(source), "不得打印请求/Key/异常正文");

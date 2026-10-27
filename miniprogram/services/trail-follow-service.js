@@ -32,10 +32,11 @@ function validLocation(point) {
     && !(point.latitude === 0 && point.longitude === 0);
 }
 function createSession({ onLocation, onError }) {
-  let cancelled = false, requested = false, pending = false, started = false, listening = false;
-  let startSettled = Promise.resolve(), stopInFlight = null;
-  const session = { start, stop, get cancelled() { return cancelled; } };
-  const release = () => { if (owner === session) owner = null; };
+  let cancelled = false, requested = false, pending = false, started = false, listening = false, errorListening = false;
+  let startSettled = Promise.resolve(), startPromise = null, stopPromise = null, stopInFlight = null;
+  const session = { start, stop, get cancelled() { return cancelled; },
+    get cleanupState() { return { pending, started, listening, errorListening, ownsLocation: owner === session }; } };
+  const release = () => { if (owner === session && !pending && !started && !listening && !errorListening) owner = null; };
   const current = () => !cancelled && owner === session;
   const check = () => { if (!current()) throw failure("CANCELLED"); };
   const listener = point => {
@@ -48,11 +49,11 @@ function createSession({ onLocation, onError }) {
     if (current() && started) onError(failure("LOCATION_FAILED"));
   };
   function detach() {
-    if (!listening) return;
-    listening = false;
-    try { wx.offLocationChange(listener); } catch (_) { /* 取消标志仍屏蔽回调 */ }
-    if (typeof wx.offLocationChangeError === "function") {
-      try { wx.offLocationChangeError(errorListener); } catch (_) { /* 不影响正常清理 */ }
+    if (listening) {
+      try { wx.offLocationChange(listener); listening = false; } catch (_) { /* 保留未确认解绑，允许主动重试 */ }
+    }
+    if (errorListening) {
+      try { wx.offLocationChangeError(errorListener); errorListening = false; } catch (_) { /* 取消标志屏蔽旧错误 */ }
     }
   }
   function stopSdk() {
@@ -72,11 +73,26 @@ function createSession({ onLocation, onError }) {
   function stop() {
     cancelled = true;
     detach();
-    if (!requested) { release(); return Promise.resolve(); }
+    if (stopPromise) return stopPromise;
+    if (!requested && !listening && !errorListening) { release(); return Promise.resolve(); }
     // SDK尚未回执时不能释放锁。迟到success必须先stop，禁止启动下一个会话。
-    return deadline(pending ? startSettled.then(stopSdk) : stopSdk(), "STOP_FAILED", 8000);
+    const operation = Promise.resolve().then(async () => {
+      if (pending) await startSettled;
+      await stopSdk();
+      if (listening || errorListening) throw failure("STOP_FAILED");
+      release();
+    });
+    stopPromise = deadline(operation, "STOP_FAILED", 8000);
+    stopPromise.then(() => { stopPromise = null; }, () => { stopPromise = null; });
+    return stopPromise;
   }
-  async function start() {
+  function start() {
+    if (cancelled) return Promise.reject(failure("CANCELLED"));
+    // 在任何异步权限查询前缓存同一Promise；取消状态与SDK实际状态独立。
+    if (!startPromise) startPromise = Promise.resolve().then(startOnce);
+    return startPromise;
+  }
+  async function startOnce() {
     if (owner && owner !== session) {
       if (!owner.cancelled) throw failure("BUSY");
       // 已退出页面的失败清理也可由下一次主动开始重试，不丢失会话锁。
@@ -90,12 +106,15 @@ function createSession({ onLocation, onError }) {
     try {
       const privacy = await request("getPrivacySetting", {}, "PRIVACY_FAILED");
       check();
+      if (!privacy || typeof privacy.needAuthorization !== "boolean") throw failure("PRIVACY_FAILED");
       if (privacy.needAuthorization) throw failure("PRIVACY_REQUIRED");
       await request("authorize", { scope: "scope.userLocation" }, "LOCATION_DENIED");
       check();
       listening = true;
       wx.onLocationChange(listener);
-      if (typeof wx.onLocationChangeError === "function" && typeof wx.offLocationChangeError === "function") wx.onLocationChangeError(errorListener);
+      if (typeof wx.onLocationChangeError === "function" && typeof wx.offLocationChangeError === "function") {
+        errorListening = true; wx.onLocationChangeError(errorListener);
+      }
       requested = true; pending = true;
       const sdkStart = new Promise((resolve, reject) => {
         try {
@@ -104,7 +123,7 @@ function createSession({ onLocation, onError }) {
         } catch (_) { pending = false; release(); reject(failure("START_FAILED")); }
       });
       startSettled = sdkStart.then(() => undefined, () => undefined);
-      sdkStart.then(() => { if (cancelled) stopSdk().catch(() => {}); }, () => {});
+      sdkStart.then(() => { if (cancelled) stop().catch(() => {}); }, () => {});
       await deadline(sdkStart, "TIMEOUT");
       check();
     } catch (error) {

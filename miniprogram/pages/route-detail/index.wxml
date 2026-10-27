@@ -101,7 +101,44 @@
         <text wx:elif="{{mapCenter.discardedTrackPointCount > 0}}" class="map-message">部分轨迹资料暂不可用。</text>
       </block>
       <view wx:else class="map-message">起点位置暂不可用</view>
-      <!-- v0.1 暂不开放真实 GPS 循迹；页面处理函数、定位服务和算法回放保留。 -->
+      <view class="follow-panel real-follow-panel">
+        <text class="follow-title">真实GPS循迹（前台实验功能）</text>
+        <text wx:if="{{followPlatformBlock}}" class="follow-warning" role="alert">{{followPlatformBlock}}</text>
+        <text class="follow-status">{{followLabels[followState.status]}}</text>
+        <text class="navigation-note">仅在本页前台、由您主动开启。退出或切到后台会停止，不自动恢复。不保存或上传位置历史。</text>
+        <text class="navigation-note">真实蓝点来自手机定位，不吸附轨迹。B1进度与模拟演示分开；起点附近需连续确认。</text>
+        <view class="follow-metrics">
+          <text>定位质量：{{followState.qualityText}}</text>
+          <text>定位精度：{{followState.accuracyText || '尚无真实位置'}}</text>
+          <text>最近更新：{{followState.updatedText || '等待真实定位'}}</text>
+          <text>B1已确认轨迹进度：{{followState.progressText}}</text>
+          <text>参考已走：{{followState.walkedText}} · 参考剩余：{{followState.remainingText}}</text>
+        </view>
+        <text wx:if="{{followState.message}}" class="follow-warning" role="alert">{{followState.message}}</text>
+        <text wx:if="{{followState.offRouteStatus === 'suspected'}}" class="follow-warning">疑似偏离路线，请结合现场道路确认。</text>
+        <view class="follow-actions">
+          <button class="navigation-button" bindtap="onStartFollowTap" disabled="{{!!followPlatformBlock || followState.cleanupPending || followState.status === 'stopping' || followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused'}}">开始真实循迹（私人测试）</button>
+          <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following'}}" class="navigation-button" bindtap="onPauseFollowTap">暂停循迹</button>
+          <button wx:if="{{followState.status === 'paused'}}" class="navigation-button" bindtap="onResumeFollowTap" disabled="{{!!followPlatformBlock}}">继续循迹</button>
+          <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused' || followState.cleanupPending}}" class="navigation-button" bindtap="onStopFollowTap">{{followState.cleanupPending ? '重试停止定位' : '结束循迹'}}</button>
+          <button class="navigation-button" bindtap="onFollowRecenterTap" disabled="{{!followState.location || followState.stale || followState.quality !== 'reliable'}}">回到当前位置</button>
+          <button class="navigation-button" bindtap="onViewTrailTap" disabled="{{!mapCenter || mapRenderError}}">查看完整路线</button>
+          <button wx:if="{{followState.canComplete}}" class="navigation-button" bindtap="onConfirmFollowTap">确认完成本次循迹</button>
+        </view>
+        <button class="navigation-button" bindtap="onCheckFollowPrivacyTap" loading="{{followPrivacyStatus === 'checking'}}" disabled="{{followPrivacyStatus === 'checking'}}">检查隐私授权（不启动定位）</button>
+        <button class="navigation-button" bindtap="onFollowPrivacyView">阅读隐私保护指引</button>
+        <text class="navigation-note">{{followPrivacyMessage}}</text>
+        <view wx:if="{{followPrivacyVisible}}" class="follow-privacy">
+          <text>请阅读《{{followPrivacyContractName}}》。同意只处理微信隐私授权，不会自动定位；之后请主动点击开始或继续。</text>
+          <button id="follow-privacy-agree" class="navigation-button" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onFollowPrivacyAgree">同意隐私指引</button>
+          <button class="navigation-button" bindtap="onFollowPrivacyCancel">暂不授权</button>
+        </view>
+        <text class="navigation-note">算法阈值待设备与受控步行校准（CALIBRATION_PENDING）。当前不提供后台定位或专业安全导航。</text>
+        <text wx:if="{{nativeRecoveryMessage}}" class="follow-warning" role="alert">{{nativeRecoveryMessage}}</text>
+        <button class="navigation-button" bindtap="onRetryNativeCleanupTap">检查／重试路线速览清理</button>
+        <text wx:if="{{accessRecoveryMessage}}" class="follow-warning" role="alert">{{accessRecoveryMessage}}</text>
+        <button wx:if="{{accessRecoveryMessage}}" class="navigation-button" bindtap="onAccessRecoveryTap">检查单次定位请求状态</button>
+      </view>
       <view wx:if="{{overviewMode}}" class="simulation-panel">
         <text class="simulation-title">路线速览</text>
         <text class="simulation-warning">本功能根据正式徒步轨迹快速展示路线走向，仅用于地图演示，不代表实时GPS定位或实时轨迹匹配。</text>
@@ -131,6 +168,26 @@
         <text class="navigation-note">{{simulationState.b1Text}}</text>
         <text class="navigation-note">自动快速演示，标准目标约17秒。播放位置与B1匹配进度可能不同，不代表实际徒步用时。</text>
         <text wx:if="{{simulationState.message}}" class="simulation-warning" role="alert">{{simulationState.message}}</text>
+      </view>
+      <view wx:if="{{accessConsent.visible}}" class="access-consent-mask" catchtap="onAccessConsentCancel" data-request-id="{{accessConsent.requestId}}">
+        <view class="access-consent-card" role="dialog" aria-modal="true" catchtap="onAccessConsentContentTap">
+          <text class="follow-title">本次步行接驳的第三方服务</text>
+          <text>服务提供方：{{accessConsent.providerLegalName || '法律主体待项目所有者核实，当前禁止规划'}}</text>
+          <text>服务：高德步行路线规划 Web API（非客户端SDK）</text>
+          <text>目的：规划您本次当前位置到“{{accessConsent.targetName}}”的临时步行接驳。</text>
+          <text>您同意本次请求并完成微信必要授权后，起点和终点坐标将经CloudBase发送给高德。拒绝不影响查看绿色轨迹和节点。</text>
+          <text selectable="true">高德隐私政策：{{accessConsent.policyUrl}}</text>
+          <button class="navigation-button" catchtap="onAccessPolicyTap" data-request-id="{{accessConsent.requestId}}" disabled="{{accessConsent.stage !== 'pending'}}">阅读高德隐私政策</button>
+          <text wx:if="{{accessConsent.blockedReason}}" class="follow-warning" role="alert">{{accessConsent.blockedReason}}</text>
+          <text wx:if="{{accessConsent.message}}" class="follow-warning" role="alert">{{accessConsent.message}}</text>
+          <view wx:if="{{accessConsent.stage === 'wechatPrivacy'}}">
+            <button class="navigation-button" catchtap="onAccessWeChatPrivacyView" data-request-id="{{accessConsent.requestId}}">阅读微信隐私保护指引</button>
+            <button id="access-wechat-privacy-agree" class="navigation-button" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onAccessWeChatPrivacyAgree" data-request-id="{{accessConsent.requestId}}" disabled="{{accessConsent.wechatPolicyFailed}}">同意微信隐私指引</button>
+          </view>
+          <button class="navigation-button" catchtap="onAccessConsentAgree" data-request-id="{{accessConsent.requestId}}" disabled="{{!accessConsent.ready || accessConsent.stage !== 'pending'}}">同意并规划</button>
+          <button class="navigation-button" catchtap="onAccessConsentCancel" data-request-id="{{accessConsent.requestId}}">暂不使用</button>
+          <text class="navigation-note">本次同意不永久保存，也不启用真实GPS循迹。关闭此说明即取消本次意图。</text>
+        </view>
       </view>
       <view wx:if="{{selectedWaypoint}}" class="waypoint-card">
         <text class="waypoint-order">节点 {{selectedWaypoint.order}}</text>

@@ -1,3 +1,4 @@
+const { APPROVED_ACCESS, consentEvent, startAccess } = require('./access-consent-fixtures.cjs');
 // 真实页面/service/adapter + 本地微信/数据库回调；不是云端或手机验收。
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,7 +17,7 @@ const errors = [], calls = { native: [], location: [], cloud: [], queries: [], n
 const hash = file => crypto.createHash('sha256').update(read(file)).digest('hex');
 const protectedFiles = ['data/routes/damushan.json', 'data/routes/damushan-import.json', 'data/routes/xiamen-loop.json', 'data/routes/xiamen-loop-import.json'];
 const hashes = protectedFiles.map(file => [file, hash(file)]);
-const wx = {
+const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); },
   navigateTo(value) { calls.navigation.push(value); }, navigateBack() {}, redirectTo() {},
   openLocation(value) { calls.native.push(value); }, getLocation(value) { calls.location.push(value); },
   cloud: {
@@ -38,7 +39,7 @@ const wx = {
 };
 function service(file) {
   const module = { exports: {} };
-  vm.runInNewContext(read(file), { module, wx, require: () => env, setTimeout, clearTimeout });
+  vm.runInNewContext(read(file), { module, wx, require: name => name.includes('access-privacy') ? APPROVED_ACCESS : env, setTimeout, clearTimeout });
   return module.exports;
 }
 const routes = service('miniprogram/services/route-service.js');
@@ -62,7 +63,7 @@ function assertTrail(p, r) {
 }
 async function beginAccess(p, r) {
   p.onMarkerTap({ detail: { markerId: r.waypoints[0].id } });
-  const pending = p.onPlanAccessTap(); assert.equal(p.data.accessRoute.status, 'locating');
+  const pending = startAccess(p); await tick(); assert.equal(p.data.accessRoute.status, 'locating');
   assert.equal(calls.location.at(-1).type, 'gcj02');
   const origin = { ...r.track[1] }; calls.location.at(-1).success(origin); await tick();
   assert.equal(p.data.accessRoute.status, 'planning');
@@ -105,7 +106,7 @@ async function run() {
     assert.equal(p.data.nativeNavigation.status, 'idle'); assert.equal(p.data.mapPolylines.length, 1);
     p.onMarkerTap({ detail: { markerId: to.waypoints[0].id } }); assert.equal(p.data.selectedWaypoint.name, to.waypoints[0].name);
   }
-  await p.onLoad({ id: mountain._id }); const denied = p.onPlanAccessTap(); await denied;
+  await p.onLoad({ id: mountain._id }); const denied = startAccess(p); await denied;
   assert.equal(calls.location.length, 3); // 未选节点不额外定位。
   for (const code of ['ROUTE_UNAVAILABLE', 'UPSTREAM_ERROR', 'WALKING_RANGE_EXCEEDED']) {
     const failure = await beginAccess(p, mountain);

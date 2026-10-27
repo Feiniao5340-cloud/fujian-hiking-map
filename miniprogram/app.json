@@ -14,7 +14,7 @@
   "style": "v2",
   "permission": {
     "scope.userLocation": {
-      "desc": "用于您主动发起步行接驳规划时获取一次当前位置"
+      "desc": "用于主动规划步行接驳及前台GPS循迹定位"
     }
   },
   "requiredPrivateInfos": [
