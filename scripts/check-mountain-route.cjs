@@ -17,7 +17,7 @@ const errors = [], calls = { native: [], location: [], cloud: [], queries: [], n
 const hash = file => crypto.createHash('sha256').update(read(file)).digest('hex');
 const protectedFiles = ['data/routes/damushan.json', 'data/routes/damushan-import.json', 'data/routes/xiamen-loop.json', 'data/routes/xiamen-loop-import.json'];
 const hashes = protectedFiles.map(file => [file, hash(file)]);
-const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); },
+const wx = { openPrivacyContract(o) { if (o.success) o.success(); }, getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); },
   navigateTo(value) { calls.navigation.push(value); }, navigateBack() {}, redirectTo() {},
   openLocation(value) { calls.native.push(value); }, getLocation(value) { calls.location.push(value); },
   cloud: {

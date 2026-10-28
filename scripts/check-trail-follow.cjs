@@ -619,7 +619,7 @@ async function main() {
     const h=harness(require('../miniprogram/config/access-privacy')),p=h.page();await h.open(p);p.onSimulationStartTap();await p.onStartFollowTap();assert.equal(h.calls.start.length,0);
     p.onSimulationPauseTap();await p.onStartFollowTap();assert.equal(h.calls.start.length,1);await p.onStopFollowTap();
     p.onMarkerTap({detail:{markerId:p.data.route.waypoints[0].id}});p.onPlanAccessTap();await p.onAccessConsentAgree(consentEvent(p));
-    assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);assert(h.nav.getAccessPreflight().codes.includes('ACCESS_POLICY_UNAVAILABLE'));p.onUnload();
+    assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);assert(h.nav.getAccessPreflight().codes.includes('ACCESS_REQUESTS_DISABLED'));p.onUnload();
   });
   await test('R4 public Access pending and Native remove ACK cannot be bypassed by GPS click',async()=>{
     const h=harness(),p=h.page();await h.open(p);h.behavior.holdLocate=true;p.onMarkerTap({detail:{markerId:p.data.route.waypoints[0].id}});
@@ -642,15 +642,15 @@ async function main() {
   });
   await test('R3 owner-confirmed provider/API still blocked by missing policy; data cannot override',async()=>{
     const h=harness(require('../miniprogram/config/access-privacy')),p=h.page();await h.open(p);const e=selectAccess(h,p);
-    assert.equal(h.nav.getAccessPreflight().providerLegalName,'北京高德图强科技有限公司');assert.deepEqual(plain(h.nav.getAccessPreflight().codes),['ACCESS_POLICY_UNAVAILABLE']);assert.equal(require('../miniprogram/config/access-privacy').policyPagePath,null);
+    assert.equal(h.nav.getAccessPreflight().providerLegalName,'北京高德图强科技有限公司');assert.deepEqual(plain(h.nav.getAccessPreflight().codes),['ACCESS_REQUESTS_DISABLED']);assert.equal(require('../miniprogram/config/access-privacy').policyPagePath,null);
     p.data.accessConsent.ready=true;p.data.accessConsent.providerLegalName='page data cannot authorize';await p.onAccessConsentAgree(e);
-    await assert.rejects(h.nav.authorizeAccess({isCurrent:()=>true,target:formal[0].track[0]}),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
-    await assert.rejects(h.nav.locateOnce(),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
-    await assert.rejects(h.nav.planAccessRoute(formal[0].track[0],formal[0].track[1]),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
+    await assert.rejects(h.nav.authorizeAccess({isCurrent:()=>true,target:formal[0].track[0]}),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+    await assert.rejects(h.nav.locateOnce(),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+    await assert.rejects(h.nav.planAccessRoute(formal[0].track[0],formal[0].track[1]),x=>x.code==='ACCESS_REQUESTS_DISABLED');
     assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);assert.equal(h.calls.privacy.length,0);p.onUnload();
   });
-  await test('R2 each missing provider, API or policy page independently prevents requests',async()=>{
-    for(const patch of [{providerLegalName:null},{getLocationApproved:false},{policyPagePath:null}]){const h=harness({...APPROVED_ACCESS,...patch}),p=h.page();await h.open(p);const e=selectAccess(h,p);await p.onAccessConsentAgree(e);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);assert.equal(h.calls.privacy.length,0);p.onUnload();}
+  await test('R2 each missing provider, API or reader channel independently prevents requests',async()=>{
+    for(const patch of [{providerLegalName:null},{getLocationApproved:false},{policyReader:null}]){const h=harness({...APPROVED_ACCESS,...patch}),p=h.page();await h.open(p);const e=selectAccess(h,p);await p.onAccessConsentAgree(e);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);assert.equal(h.calls.privacy.length,0);p.onUnload();}
   });
   await test('R2 disclosure precedes SDK; decline or close means zero location and zero cloud',async()=>{
     for(const close of ['decline','mask-close']){const h=harness(),p=h.page();await h.open(p);const trail=p.data.mapPolylines,markers=p.data.mapMarkers;
@@ -802,6 +802,63 @@ async function main() {
     p.onAccessConsentCancel(e);await p.onAccessPolicyTap(e);assert.equal(h.calls.policy.length,0);assert.equal(JSON.stringify(p.data.mapCenter),map);
     await p.onOpenTargetTap();assert.equal(h.calls.native.length,1);p.onSimulationStartTap();assert.equal(p.data.simulationState.status,'playing');
     assert.equal(p.data.followState.status,'idle');assert.equal(h.calls.start.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+  });
+  await test('D7 reader channel verification URL and API are necessary even with request approval',async()=>{
+    for(const patch of [{policyReader:null},{policyReader:'unknown'},{policyReaderVerified:false},{policyReaderVerified:'true'},{policyUrl:'https://example.invalid/privacy'},{policyReader:null,policyPagePath:'/pages/legacy-is-not-a-reader/index'}]){
+      const h=harness({...APPROVED_ACCESS,...patch}),p=h.page();await h.open(p);const e=selectAccess(h,p);p.data.accessConsent.ready=true;
+      assert.equal(h.nav.getAccessPreflight().readerAvailable,false);assert(h.nav.getAccessPreflight().codes.includes('ACCESS_POLICY_UNAVAILABLE'));
+      await p.onAccessConsentAgree(e);await assert.rejects(h.nav.openAccessPrivacyPolicy(),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
+      await assert.rejects(h.nav.authorizeAccess({isCurrent:()=>true,target:{latitude:30,longitude:120}}),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
+      await assert.rejects(h.nav.locateOnce(),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
+      await assert.rejects(h.nav.planAccessRoute({latitude:30,longitude:120},{latitude:30.01,longitude:120.01}),x=>x.code==='ACCESS_POLICY_UNAVAILABLE');
+      assert.equal(h.calls.policy.length,0);assert.deepEqual(h.calls.order,[]);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+    }
+    const h=harness(),p=h.page();await h.open(p);const e=selectAccess(h,p);delete h.wx.openPrivacyContract;
+    assert.equal(h.nav.getAccessPreflight().readerAvailable,false);await p.onAccessPolicyTap(e);await p.onAccessConsentAgree(e);
+    assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+  });
+  await test('D7 verified reader and explicit consent never bypass disabled or missing request permit',async()=>{
+    const real=require('../miniprogram/config/access-privacy');assert.equal(real.accessRequestsEnabled,false);assert.equal(real.policyReaderVerified,true);
+    for(const permit of [false,undefined,null,'true',1]){
+      const h=harness({...APPROVED_ACCESS,accessRequestsEnabled:permit}),p=h.page();await h.open(p);let e=selectAccess(h,p);
+      assert.equal(h.nav.getAccessPreflight().readerAvailable,true);assert.deepEqual(plain(h.nav.getAccessPreflight().codes),['ACCESS_REQUESTS_DISABLED']);
+      await p.onAccessPolicyTap(e);assert.equal(p._accessIntent,null);p.onPlanAccessTap();e=consentEvent(p);p.data.accessConsent.ready=true;
+      await p.onAccessConsentAgree(e);await assert.rejects(h.nav.authorizeAccess({isCurrent:()=>true,target:{latitude:30,longitude:120}}),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+      await assert.rejects(h.nav.locateOnce({grant:{}}),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+      await assert.rejects(h.nav.planAccessRoute({latitude:30,longitude:120},{latitude:30.01,longitude:120.01},{}),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+      assert.equal(h.calls.policy.length,1);assert.deepEqual(h.calls.order,[]);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+    }
+  });
+  await test('D7 no consent or forged grant cannot locate; fully approved mock consumes each grant once',async()=>{
+    const h=harness(),p=h.page();await h.open(p);const old=selectAccess(h,p);await p.onAccessPolicyTap(old);p.onPlanAccessTap();
+    assert.equal(h.nav.getAccessPreflight().ready,true);assert.deepEqual(h.calls.order,[]);
+    await assert.rejects(h.nav.locateOnce({grant:{}}),x=>x.code==='ACCESS_CONSENT_REQUIRED');
+    const e=consentEvent(p),r=p.onAccessConsentAgree(e);p.onAccessConsentAgree(e);await flush();assert.deepEqual(h.calls.order,['privacy','authorize','locate','cloud']);
+    finishAccess(h);await r;assert.equal(h.calls.locate.length,1);assert.equal(h.calls.cloud.length,1);p.onUnload();
+    const v=harness(),target={latitude:30.01,longitude:120.01};let current=true;
+    const grant=await v.nav.authorizeAccess({isCurrent:()=>current,target});v.behavior.holdLocate=true;
+    const pending=v.nav.locateOnce({grant});await assert.rejects(v.nav.locateOnce({grant}),x=>x.code==='ACCESS_CONSENT_REQUIRED');assert.equal(v.calls.locate.length,1);
+    v.calls.locate[0].success({latitude:30,longitude:120});const origin=await pending;
+    const request=v.nav.planAccessRoute(origin,target,grant);await assert.rejects(v.nav.planAccessRoute(origin,target,grant),x=>x.code==='ACCESS_CONSENT_REQUIRED');
+    assert.equal(v.calls.cloud.length,1);v.calls.cloud[0].success({result:{success:true,distanceMeters:5,durationSeconds:6,points:[origin,target]}});await request;
+    await assert.rejects(v.nav.locateOnce({grant}),x=>x.code==='ACCESS_CONSENT_REQUIRED');
+    current=false;assert.equal(v.calls.cloud.length,1);
+  });
+  await test('D7 request permit is rechecked before location and before cloud even for an existing grant',async()=>{
+    for(const stage of ['authorized','located']){
+      const policy={...APPROVED_ACCESS},h=harness(policy),target={latitude:30.01,longitude:120.01};
+      const grant=await h.nav.authorizeAccess({isCurrent:()=>true,target});let origin;
+      if(stage==='located'){h.behavior.holdLocate=true;const r=h.nav.locateOnce({grant});h.calls.locate[0].success({latitude:30,longitude:120});origin=await r;}
+      policy.accessRequestsEnabled=false;
+      if(stage==='authorized')await assert.rejects(h.nav.locateOnce({grant}),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+      else await assert.rejects(h.nav.planAccessRoute(origin,target,grant),x=>x.code==='ACCESS_REQUESTS_DISABLED');
+      assert.equal(h.calls.locate.length,stage==='authorized'?0:1);assert.equal(h.calls.cloud.length,0);
+    }
+  });
+  await test('D7 fully approved Access mock does not authorize release GPS',async()=>{
+    const h=harness(),p=h.page();h.behavior.envVersion='release';await h.open(p);
+    assert.equal(h.nav.getAccessPreflight().ready,true);await p.onStartFollowTap();assert.equal(p.data.followState.status,'blocked');
+    assert.equal(h.calls.start.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
   });
   for (const name of ['getLocation', 'startLocationUpdate', 'onLocationChange']) assert(config.requiredPrivateInfos.includes(name));
   assert(!config.requiredBackgroundModes); assert(!config.permission['scope.userLocationBackground']);

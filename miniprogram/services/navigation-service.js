@@ -6,6 +6,7 @@ const messages = {
   AMAP_PROVIDER_PENDING: "高德服务提供方法律主体尚未核实，暂不能定位或发送接驳请求。请由项目所有者核对适用协议。",
   LOCATION_INTERFACE_UNAVAILABLE: "当前账号的单次定位getLocation接口未开通或不可用，请由项目所有者核对接口准入。持续定位接口已开通不能替代此权限。",
   ACCESS_POLICY_UNAVAILABLE: "真实接驳的政策准入条件尚未满足，暂不能规划。阅读隐私指引不会启用定位或规划。",
+  ACCESS_REQUESTS_DISABLED: "真实步行接驳尚未获准启用；阅读指引或同意本次操作均不会解除此限制。",
   ACCESS_CONSENT_REQUIRED: "请先确认本次第三方服务及必要授权，再发起新的接驳请求。",
   ACCESS_CANCELLED: "本次接驳意图已取消，请主动重新发起。",
   PRIVACY_REQUIRED: "微信隐私授权尚未完成，本次未发起规划。",
@@ -66,13 +67,19 @@ function openTarget(target) {
   return timedCall((success, fail) => wx.openLocation({ ...position(target), name: target.name, scale: 16, success, fail }),
     20000, "OPEN_LOCATION_FAILED", "OPEN_LOCATION_FAILED");
 }
+function policyReaderAvailable() {
+  return accessPrivacy.policyReader === "wechatPrivacyContractSupplement" && accessPrivacy.policyReaderVerified === true
+    && accessPrivacy.policyUrl === "https://lbs.amap.com/pages/privacy/"
+    && typeof wx !== "undefined" && typeof wx.openPrivacyContract === "function";
+}
 function getAccessPreflight() {
   const provider = typeof accessPrivacy.providerLegalName === "string" ? accessPrivacy.providerLegalName.trim() : "";
   const codes = [];
   if (!provider) codes.push("AMAP_PROVIDER_PENDING");
   if (accessPrivacy.getLocationApproved !== true) codes.push("LOCATION_INTERFACE_UNAVAILABLE");
-  if (typeof accessPrivacy.policyPagePath !== "string" || !accessPrivacy.policyPagePath.startsWith("/pages/")) codes.push("ACCESS_POLICY_UNAVAILABLE");
-  return { providerLegalName: provider, policyUrl: accessPrivacy.policyUrl,
+  if (!policyReaderAvailable()) codes.push("ACCESS_POLICY_UNAVAILABLE");
+  if (accessPrivacy.accessRequestsEnabled !== true) codes.push("ACCESS_REQUESTS_DISABLED");
+  return { providerLegalName: provider, policyUrl: accessPrivacy.policyUrl, readerAvailable: policyReaderAvailable(),
     blockedReason: codes.map(errorMessage).join(" "), codes, ready: codes.length === 0 };
 }
 function requireAccessReady() { const state = getAccessPreflight(); if (!state.ready) throw failure(state.codes[0]); }
@@ -104,7 +111,7 @@ async function authorizeAccess({ isCurrent, onPrivacyRequired, target }) {
 }
 function openAccessPrivacyPolicy() {
   // 阅读入口与Access准入分离；打开微信指引不证明高德全文已读或已同意。
-  if (typeof wx.openPrivacyContract !== "function") return Promise.reject(failure("ACCESS_POLICY_UNAVAILABLE"));
+  if (!policyReaderAvailable()) return Promise.reject(failure("ACCESS_POLICY_UNAVAILABLE"));
   return timedCall((success, fail) => wx.openPrivacyContract({ success: () => success({ opened: true }), fail }),
     20000, "ACCESS_POLICY_UNAVAILABLE", "ACCESS_POLICY_UNAVAILABLE");
 }

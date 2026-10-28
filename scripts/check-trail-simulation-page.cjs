@@ -31,8 +31,8 @@ const protectedHashes = {
   "data/routes/xiaoping-forest-park.json": "e953b3483189e26634347928224043de29eed50eca85fa96b250958bcb06de2e",
   "data/routes/yushandao-import.json": "0e6b4dfdd503b94215c15a5fd70c92d89a1c4371079234052aae50dfbc9f8471",
   "data/routes/yushandao.json": "99a5afa37e12dc67bfd17ffc87b831224e3fce211c986c80990bfb07b512a94c",
-  // Day5-D3 approved reader-only service change; Route/B1 and all other guards remain unchanged.
-  "miniprogram/services/navigation-service.js": "6702c546d7dad53a315a8e8dd541fefcad63a388bcd1ec573290ce1e0ba54d26",
+  // Day5-D7 approved reader/request contract candidate; Route/B1 and all other guards remain unchanged.
+  "miniprogram/services/navigation-service.js": "1acdc7c94bebf5dc52d6e589975d3c66ed483962dc326793ec53a08092acdbac",
   // Day2 authorized service repair; all other original protected hashes remain unchanged.
   "miniprogram/services/trail-follow-service.js": "048a57639866a4a4f33c6270c24ef1f896756f115ca7dccf02297ef1741ea842",
   "miniprogram/utils/map-data.js": "d72e158c3863dbed910bd1d262c5b3c0b616455f467e0a8132a97b7cc7cb229e",
@@ -49,7 +49,7 @@ function harness(clockOptions = {}) {
   const clock = { setInterval(fn, interval) { const t = { fn, interval, due: now + interval }; timers.add(t); return t; }, clearInterval(t) { timers.delete(t); },
     setTimeout(fn, interval) { const t = { fn, interval: 0, due: now + interval }; timers.add(t); return t; }, clearTimeout(t) { timers.delete(t); } };
   const forbiddenGps = () => { calls.gps++; throw new Error('模拟不得启动真实GPS'); };
-  const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); }, startLocationUpdate: forbiddenGps, onLocationChange: forbiddenGps,
+  const wx = { openPrivacyContract(o) { if (o.success) o.success(); }, getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); }, startLocationUpdate: forbiddenGps, onLocationChange: forbiddenGps,
     getLocation(o) { calls.location.push(o); o.success({ ...current.track[104] }); },
     openLocation(o) { calls.native.push(o); o.success(); },
     cloud: { callFunction(o) { calls.cloud.push(o); }, database() { throw new Error('不能读写真实云'); } },

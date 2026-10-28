@@ -19,7 +19,7 @@ assert.equal(documents.size, formal.length);
 const protectedFiles = fs.readdirSync(path.join(root, 'data/routes')).map(f => 'data/routes/' + f);
 const protectedHashes = protectedFiles.map(f => [f, sha(f)]);
 const calls = { native: [], location: [], cloud: [], navigation: [] }, errors = [];
-const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); },
+const wx = { openPrivacyContract(o) { if (o.success) o.success(); }, getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); },
   navigateTo(value) { calls.navigation.push(value); }, navigateBack() {}, redirectTo() {},
   openLocation(value) { calls.native.push(value); }, getLocation(value) { calls.location.push(value); },
   cloud: {

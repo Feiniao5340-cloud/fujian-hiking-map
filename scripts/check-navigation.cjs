@@ -39,7 +39,7 @@ function client() {
   let currentRoute = route;
   const timers = [];
   const calls = { location: [], native: [], cloud: [], back: 0 };
-  const wx = { getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); }, navigateBack() { calls.back++; }, redirectTo() {}, getLocation(o) { calls.location.push(o); }, openLocation(o) { calls.native.push(o); },
+  const wx = { openPrivacyContract(o) { if (o.success) o.success(); }, getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); }, navigateBack() { calls.back++; }, redirectTo() {}, getLocation(o) { calls.location.push(o); }, openLocation(o) { calls.native.push(o); },
     cloud: { callFunction(o) { assert.equal(o.config.env, env.cloudEnvId); calls.cloud.push(o); } } };
   const module = { exports: {} };
   vm.runInNewContext(read("miniprogram/services/navigation-service.js"), { module, wx, require: name => name.includes('access-privacy') ? APPROVED_ACCESS : env,
