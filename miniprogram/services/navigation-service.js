@@ -5,7 +5,7 @@ const accessGrants = new WeakMap(); // 本次授权凭据只在内存中，不�
 const messages = {
   AMAP_PROVIDER_PENDING: "高德服务提供方法律主体尚未核实，暂不能定位或发送接驳请求。请由项目所有者核对适用协议。",
   LOCATION_INTERFACE_UNAVAILABLE: "当前账号的单次定位getLocation接口未开通或不可用，请由项目所有者核对接口准入。持续定位接口已开通不能替代此权限。",
-  ACCESS_POLICY_UNAVAILABLE: "高德政策阅读入口尚未验证可用，暂不能规划。请先完成可访问的政策披露。",
+  ACCESS_POLICY_UNAVAILABLE: "真实接驳的政策准入条件尚未满足，暂不能规划。阅读隐私指引不会启用定位或规划。",
   ACCESS_CONSENT_REQUIRED: "请先确认本次第三方服务及必要授权，再发起新的接驳请求。",
   ACCESS_CANCELLED: "本次接驳意图已取消，请主动重新发起。",
   PRIVACY_REQUIRED: "微信隐私授权尚未完成，本次未发起规划。",
@@ -103,8 +103,10 @@ async function authorizeAccess({ isCurrent, onPrivacyRequired, target }) {
   return grant;
 }
 function openAccessPrivacyPolicy() {
-  if (!accessPrivacy.policyPagePath || !accessPrivacy.policyPagePath.startsWith("/pages/")) return Promise.reject(failure("ACCESS_POLICY_UNAVAILABLE"));
-  return timedCall((success, fail) => wx.navigateTo({ url: accessPrivacy.policyPagePath, success, fail }), 20000, "ACCESS_POLICY_UNAVAILABLE", "ACCESS_POLICY_UNAVAILABLE");
+  // 阅读入口与Access准入分离；打开微信指引不证明高德全文已读或已同意。
+  if (typeof wx.openPrivacyContract !== "function") return Promise.reject(failure("ACCESS_POLICY_UNAVAILABLE"));
+  return timedCall((success, fail) => wx.openPrivacyContract({ success: () => success({ opened: true }), fail }),
+    20000, "ACCESS_POLICY_UNAVAILABLE", "ACCESS_POLICY_UNAVAILABLE");
 }
 async function locateOnce({ onSettled, grant } = {}) {
   const authorization = requireCurrent(grant, "authorized");

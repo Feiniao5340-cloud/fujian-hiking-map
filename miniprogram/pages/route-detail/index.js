@@ -345,7 +345,14 @@ const definition = {
     const intent = this.accessEventIntent(event);
     if (!intent || intent.stage !== "pending" || intent.policyOpening) return;
     intent.policyOpening = true;
-    try { await navigation.openAccessPrivacyPolicy(); }
+    this.setData({ accessConsent: { ...this.data.accessConsent, message: "正在打开微信隐私保护指引；不会定位或规划。" } });
+    try {
+      await navigation.openAccessPrivacyPolicy();
+      if (!this.accessIntentIsCurrent(intent)) return;
+      // 浮层未触发hide时也作废本次意图；阅读成功不能生成或保留同意凭据。
+      this.cancelAccessIntent();
+      this.setData({ navigationMessage: "微信隐私保护指引已打开。请在补充文档中主动查看高德官方政策；这不代表已阅读全文或已同意。返回后请重新点击“规划到这里”。真实接驳仍未启用。" });
+    }
     catch (_) { if (this.accessIntentIsCurrent(intent)) { intent.policyFailed = true;
       this.setData({ accessConsent: { ...this.data.accessConsent, ready: false, message: "政策阅读入口未能打开。请暂不使用；本次不会定位或规划。" } }); } }
     finally { intent.policyOpening = false; }

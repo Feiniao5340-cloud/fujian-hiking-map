@@ -35,7 +35,9 @@ function harness(accessPolicy = APPROVED_ACCESS) {
       removeMarkers(o) { calls.removes.push(o); if (!behavior.holdRemove) o.success(); } }; },
     showModal(o) { calls.modal.push(o); },
     openLocation(o) { calls.native.push(o); o.success(); }, getLocation(o) { calls.order.push('locate'); calls.locate.push(o); if (!behavior.holdLocate) o.success(currentRoute.track[1]); },
-    cloud: { callFunction(o) { calls.order.push('cloud'); calls.cloud.push(o); } }, navigateTo(o) { calls.policy.push(o); behavior.policyFail ? o.fail() : o.success(); }
+    cloud: { callFunction(o) { calls.order.push('cloud'); calls.cloud.push(o); } }, navigateTo(o) { calls.policy.push(o); behavior.policyFail ? o.fail() : o.success(); },
+    openPrivacyContract(o) { calls.policy.push(o); if (behavior.policyThrow) throw Error('privacy contract unavailable');
+      if (!behavior.holdPolicy) { if (behavior.policyFail) { if (o.fail) o.fail(); } else if (o.success) o.success(); } }
   };
   function service(file) { const module = { exports: {} }; vm.runInNewContext(read(file), { module, wx, Date: ClockDate, ...clock,
     require: name => name.includes('access-privacy') ? accessPolicy : require(path.join(root, 'miniprogram/config/env')) }); return module.exports; }
@@ -732,6 +734,74 @@ async function main() {
     const e=selectAccess(h,p),q=p.onAccessConsentAgree(e);await flush();p.onAccessWeChatPrivacyView(e);
     assert(p.data.accessConsent.message.includes('微信隐私指引未能打开'));h.behavior.privacy=false;p.onAccessWeChatPrivacyAgree({...e,type:'agreeprivacyauthorization'});
     await flush();assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onAccessConsentCancel(e);await q;
+  });
+  await test('D3 reader is passive on load and Access disclosure alone; registered UI describes supplemental route',async()=>{
+    const h=harness(require('../miniprogram/config/access-privacy')),p=h.page();await h.open(p);selectAccess(h,p);
+    assert.equal(h.calls.policy.length,0);assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);
+    const wxml=read('miniprogram/pages/route-detail/index.wxml');assert(wxml.includes('catchtap="onAccessPolicyTap"'));assert(wxml.includes('补充文档中点击高德官方政策链接'));
+    p.onUnload();
+  });
+  await test('D3 reader service opens native contract with null policy path and returns only open ACK',async()=>{
+    const policy=require('../miniprogram/config/access-privacy'),h=harness(policy);assert.equal(policy.policyPagePath,null);
+    h.wx.navigateTo=()=>{throw Error('reader must not navigate to a fabricated page');};
+    assert.deepEqual(plain(await h.nav.openAccessPrivacyPolicy()),{opened:true});assert.equal(h.calls.policy.length,1);
+    assert.equal(h.nav.getAccessPreflight().ready,false);assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);
+  });
+  await test('D3 open ACK never enables production Access in develop trial or release, including data override',async()=>{
+    for(const envVersion of ['develop','trial','release']){const h=harness(require('../miniprogram/config/access-privacy')),p=h.page();h.behavior.envVersion=envVersion;await h.open(p);const old=selectAccess(h,p);
+      await p.onAccessPolicyTap(old);assert.equal(h.calls.policy.length,1);assert.equal(p._accessIntent,null);assert.equal(p.data.accessConsent.visible,false);
+      assert(p.data.navigationMessage.includes('已打开'));assert(p.data.navigationMessage.includes('不代表已阅读全文或已同意'));
+      await p.onAccessConsentAgree(old);p.onPlanAccessTap();const current=consentEvent(p);assert.notEqual(current.currentTarget.dataset.requestId,old.currentTarget.dataset.requestId);
+      p.data.accessConsent.ready=true;await p.onAccessConsentAgree(current);assert.equal(h.nav.getAccessPreflight().ready,false);
+      assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.authorize.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);
+      if(envVersion==='release'){await p.onStartFollowTap();assert.equal(p.data.followState.status,'blocked');assert.equal(h.calls.start.length,0);}p.onUnload();}
+  });
+  await test('D3 successful overlay without hide invalidates old consent; new explicit choice is still required',async()=>{
+    const h=harness(),p=h.page();await h.open(p);const old=selectAccess(h,p);await p.onAccessPolicyTap(old);
+    assert.equal(h.calls.locate.length,0);assert.equal(p._accessIntent,null);await p.onAccessConsentAgree(old);assert.equal(h.calls.cloud.length,0);
+    p.onPlanAccessTap();const fresh=consentEvent(p);assert.notEqual(fresh.currentTarget.dataset.requestId,old.currentTarget.dataset.requestId);assert.equal(p._accessIntent.stage,'pending');
+    assert.equal(h.calls.privacy.length,0);const q=p.onAccessConsentAgree(fresh);await flush();assert.deepEqual(h.calls.order,['privacy','authorize','locate','cloud']);
+    finishAccess(h);await q;assert.equal(h.calls.cloud.length,1);p.onUnload();
+  });
+  await test('D3 failure missing API and synchronous throw remain visible and block stale agreement',async()=>{
+    for(const kind of ['failure','missing','throw']){const h=harness(),p=h.page();await h.open(p);const e=selectAccess(h,p);
+      if(kind==='failure')h.behavior.policyFail=true;if(kind==='missing')delete h.wx.openPrivacyContract;if(kind==='throw')h.behavior.policyThrow=true;
+      await p.onAccessPolicyTap(e);assert(p.data.accessConsent.message.includes('未能打开'));assert.equal(p.data.accessConsent.ready,false);
+      p.data.accessConsent.ready=true;await p.onAccessConsentAgree(e);assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();}
+  });
+  await test('D3 pending repeated reader or agree clicks cannot duplicate contract or create consent',async()=>{
+    const h=harness(),p=h.page();await h.open(p);h.behavior.holdPolicy=true;const e=selectAccess(h,p),q=p.onAccessPolicyTap(e);
+    p.onAccessPolicyTap(e);await p.onAccessConsentAgree(e);assert.equal(h.calls.policy.length,1);assert.equal(h.calls.locate.length,0);
+    h.calls.policy[0].success();await q;await p.onAccessConsentAgree(e);await p.onAccessPolicyTap(e);
+    assert.equal(h.calls.policy.length,1);assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+  });
+  await test('D3 reader timeout stays failed and late success cannot revive intent or grant',async()=>{
+    const h=harness(),p=h.page();await h.open(p);h.behavior.holdPolicy=true;const e=selectAccess(h,p),q=p.onAccessPolicyTap(e);
+    await h.advance(20001);await q;assert(p.data.accessConsent.message.includes('未能打开'));const updates=h.calls.updates.length;
+    h.calls.policy[0].success();await flush();assert.equal(h.calls.updates.length,updates);await p.onAccessConsentAgree(e);
+    assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+  });
+  await test('D3 late reader success or failure after cancel hide unload route target or back cannot write new state',async()=>{
+    for(const outcome of ['success','fail'])for(const action of ['cancel','hide','unload','route','target','back']){
+      const h=harness(),p=h.page();await h.open(p);h.behavior.holdPolicy=true;const e=selectAccess(h,p),q=p.onAccessPolicyTap(e);
+      if(action==='cancel')p.onAccessConsentCancel(e);else if(action==='hide'){p.onHide();p.onShow();}else if(action==='unload')p.onUnload();
+      else if(action==='route')await h.open(p,formal[1]);else if(action==='target')p.onMarkerTap({detail:{markerId:formal[0].waypoints[1].id}});
+      else{h.wx.navigateBack=()=>{};await p.onBackTap();}
+      const before=JSON.stringify(p.data),updates=h.calls.updates.length;h.calls.policy[0][outcome]();await q;await p.onAccessConsentAgree(e);
+      assert.equal(JSON.stringify(p.data),before);assert.equal(h.calls.updates.length,updates);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);
+      if(!p._unloaded)p.onUnload();}
+  });
+  await test('D3 late old reader callback cannot cancel or update a newly created planning intent',async()=>{
+    const h=harness(),p=h.page();await h.open(p);h.behavior.holdPolicy=true;const old=selectAccess(h,p),q=p.onAccessPolicyTap(old);
+    p.onAccessConsentCancel(old);p.onPlanAccessTap();const fresh=p._accessIntent,before=JSON.stringify(p.data);
+    h.calls.policy[0].success();await q;assert.strictEqual(p._accessIntent,fresh);assert.equal(JSON.stringify(p.data),before);
+    await p.onAccessConsentAgree(old);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+  });
+  await test('D3 reader refusal and close keep map Waypoints Native and B1 simulation independent',async()=>{
+    const h=harness(require('../miniprogram/config/access-privacy')),p=h.page();await h.open(p);const map=JSON.stringify(p.data.mapCenter),e=selectAccess(h,p);
+    p.onAccessConsentCancel(e);await p.onAccessPolicyTap(e);assert.equal(h.calls.policy.length,0);assert.equal(JSON.stringify(p.data.mapCenter),map);
+    await p.onOpenTargetTap();assert.equal(h.calls.native.length,1);p.onSimulationStartTap();assert.equal(p.data.simulationState.status,'playing');
+    assert.equal(p.data.followState.status,'idle');assert.equal(h.calls.start.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
   });
   for (const name of ['getLocation', 'startLocationUpdate', 'onLocationChange']) assert(config.requiredPrivateInfos.includes(name));
   assert(!config.requiredBackgroundModes); assert(!config.permission['scope.userLocationBackground']);

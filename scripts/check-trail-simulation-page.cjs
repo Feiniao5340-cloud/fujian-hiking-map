@@ -31,7 +31,8 @@ const protectedHashes = {
   "data/routes/xiaoping-forest-park.json": "e953b3483189e26634347928224043de29eed50eca85fa96b250958bcb06de2e",
   "data/routes/yushandao-import.json": "0e6b4dfdd503b94215c15a5fd70c92d89a1c4371079234052aae50dfbc9f8471",
   "data/routes/yushandao.json": "99a5afa37e12dc67bfd17ffc87b831224e3fce211c986c80990bfb07b512a94c",
-  "miniprogram/services/navigation-service.js": "79d82daa3dd16576ef6c985974c21793aafa1ea48d549ec84343abdc50d38985",
+  // Day5-D3 approved reader-only service change; Route/B1 and all other guards remain unchanged.
+  "miniprogram/services/navigation-service.js": "6702c546d7dad53a315a8e8dd541fefcad63a388bcd1ec573290ce1e0ba54d26",
   // Day2 authorized service repair; all other original protected hashes remain unchanged.
   "miniprogram/services/trail-follow-service.js": "048a57639866a4a4f33c6270c24ef1f896756f115ca7dccf02297ef1741ea842",
   "miniprogram/utils/map-data.js": "d72e158c3863dbed910bd1d262c5b3c0b616455f467e0a8132a97b7cc7cb229e",

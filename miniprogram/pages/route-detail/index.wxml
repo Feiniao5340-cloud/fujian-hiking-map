@@ -177,7 +177,8 @@
           <text>目的：规划您本次当前位置到“{{accessConsent.targetName}}”的临时步行接驳。</text>
           <text>您同意本次请求并完成微信必要授权后，起点和终点坐标将经CloudBase发送给高德。拒绝不影响查看绿色轨迹和节点。</text>
           <text selectable="true">高德隐私政策：{{accessConsent.policyUrl}}</text>
-          <button class="navigation-button" catchtap="onAccessPolicyTap" data-request-id="{{accessConsent.requestId}}" disabled="{{accessConsent.stage !== 'pending'}}">阅读高德隐私政策</button>
+          <text class="navigation-note">请打开微信隐私保护指引，在补充文档中点击高德官方政策链接查看全文。打开指引不代表已读完或已同意；返回后需重新点击“规划到这里”。真实接驳仍未启用。</text>
+          <button class="navigation-button" catchtap="onAccessPolicyTap" data-request-id="{{accessConsent.requestId}}" disabled="{{accessConsent.stage !== 'pending'}}">阅读隐私保护指引</button>
           <text wx:if="{{accessConsent.blockedReason}}" class="follow-warning" role="alert">{{accessConsent.blockedReason}}</text>
           <text wx:if="{{accessConsent.message}}" class="follow-warning" role="alert">{{accessConsent.message}}</text>
           <view wx:if="{{accessConsent.stage === 'wechatPrivacy'}}">
