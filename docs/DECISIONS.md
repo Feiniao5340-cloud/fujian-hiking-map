@@ -13,3 +13,13 @@
 理由与影响：依赖闭合可支持下一轮经授权的原子Git整理，不代表Push或微信发布获准。正式005的Android首位置/停止、私人Nearby的连续会话进度/暂停恢复、六路线离线回放分别记录，不互相替代；正式路线Android following/进度、正式页面暂停恢复与现场校准仍待。privateFollowBlock继续拒绝release，Access继续因policyPagePath=null阻断。OWNER_CONFIRMED不提升为独立平台审核。
 
 验证：D5以文件集合、require依赖、排除与敏感扫描、diff检查及前后Hash核验为边界；不改产品代码，不重跑无关业务测试，不执行Git暂存/提交/推送或平台操作。前述R4“身份待配置/设备待验证”是历史状态，当前事实见PROJECT_STATUS。
+
+## 2026-10-29 · Day6-D4：真实Access暂缓，保留阅读与安全契约
+
+背景：政策阅读链、三层准入及云端只读边界均有证据，但不能据此自动启用真实接驳。用户明确选择方案A，优先可稳定演示的作品集。
+
+选择：高德政策阅读按钮及微信指引→补充文档→官方政策阅读链已有用户Android验证；阅读通道、当次明示同意和真实请求许可已解耦。用户已选择方案A：V0.3暂缓真实Access，生产accessRequestsEnabled=false、policyPagePath=null保持。null为历史站内页面字段，不再代表已验证的微信阅读通道缺失；阅读成功不能生成grant或定位。release真实GPS继续由privateFollowBlock阻断。不重开发Access、不关停共享云端；Waypoint卡片提前说明暂缓，保留原按钮与阅读桥接，只改WXML文案。四条B1模拟和008/010 Native性能取舍不变。
+
+影响：阅读不等于同意，客户端禁用不等于全云端禁用；任何未来服务端开关或权限调整先评估V0.2兼容性。新增两份操作手册是计划而非真机PASS，现场短段不能替代全程验收。
+
+验证：仅直接相关本地页面回归及离线WXML编译，具体结果见Day6-D4报告；不新增GPS监听、不改阈值或正式Route、不自动提交/部署/发布。

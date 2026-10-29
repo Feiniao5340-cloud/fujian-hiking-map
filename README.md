@@ -2,11 +2,11 @@
 
 基于微信原生小程序与 CloudBase 的徒步路线展示、步行接驳规划与轨迹导航模拟系统，面向实习面试作品集。
 
-**V0.2是已完成的公开版本；本目录是开发中的V0.3内部候选，尚未发布。** 当前状态更新于2026-10-27。它展示实际地图、地理数据、算法和异步状态管理，不是经过真实户外安全验证的商业导航产品。
+**V0.2是已完成的公开版本；本目录是开发中的V0.3内部候选，尚未发布。** 当前状态更新于2026-10-29。它展示实际地图、地理数据、算法和异步状态管理，不是经过真实户外安全验证的商业导航产品。
 
 ## 当前实际完成情况
 
-正常浏览包括：首页、六条路线列表与详情、绿色正式轨迹 Polyline、起点 Marker、Waypoint 卡片、微信原生打开目标位置。单次定位接驳及蓝色Access清除实现保留，但V0.3因政策阅读入口未落实而阻断真实规划。云端路线只读加载，保留空态、网络失败、授权拒绝和重试处理；正常使用无需先启动模拟。
+正常浏览包括：首页、六条路线列表与详情、绿色正式轨迹 Polyline、起点 Marker、Waypoint 卡片、微信原生打开目标位置。单次定位接驳及蓝色Access清除实现保留，但V0.3按用户选择方案A暂缓真实规划，生产accessRequestsEnabled=false。云端路线只读加载，保留空态、网络失败、授权拒绝和重试处理；正常使用无需先启动模拟。
 
 模拟演示提供**播放、暂停、继续、重播**。当前稳定版本**没有 1x/2x/4x 倍率按钮，播放速度倍率调节未交付**。原计划中的调速不计入本次完成能力。
 
@@ -45,7 +45,11 @@ B1 核心及六路线独立回放保留，包含旧算法预期失败的负控�
 
 正式Route的Android following、沿线进度、正式页面暂停/恢复、现场偏航和终点仍未完成验证；B1阈值仍为CALIBRATION_PENDING。停止回执证明SDK契约层结果，不独立证明硬件GPS停止；停止后的历史observationCount不是迟到回调探针。
 
-真实GPS仅允许开发/体验版本在用户主动操作后进入必要隐私/位置授权，release仍由privateFollowBlock拒绝（RELEASE_GPS_BLOCKED）。高德法律主体与getLocation准入已有OWNER_CONFIRMED，但未由Codex独立登录后台核验；policyPagePath仍为null，真实Access继续阻断（ACCESS_POLICY_PENDING）。
+真实GPS仅允许开发/体验版本在用户主动操作后进入必要隐私/位置授权，release仍由privateFollowBlock拒绝（RELEASE_GPS_BLOCKED）。高德法律主体与getLocation准入已有OWNER_CONFIRMED，但未由Codex独立登录后台核验；policyPagePath仍为null，但微信指引及补充文档阅读通道已有用户Android验证；三层准入契约已完成，真实Access按方案A暂缓（accessRequestsEnabled=false），不是阅读入口仍缺失。
+
+## 演示与现场准备
+
+[3分钟及8分钟作品集演示指南](docs/PORTFOLIO_DEMO_GUIDE.md) · [正式GPS现场验收手册](docs/V03_GPS_FIELD_ACCEPTANCE_RUNBOOK.md)。两份手册是操作计划，不是新增Android验收。Day6-D3云端只读核查已完成；客户端Access禁用不等于共享服务端全局禁用，没有因此发送真实位置或启用接驳。当前87项候选清单是此前快照，这两份新手册尚未自动纳入清单，后续打包应显式评估。
 
 ## 技术栈与项目结构
 
@@ -70,7 +74,7 @@ V0.3内部候选清单`RELEASE_FILES_V03_INTERNAL_CANDIDATE.txt`列出87个包�
 3. 在自己的私有运行副本配置三处：project.config.json 的 appid、miniprogram/config/env.js 的 cloudEnvId、cloudfunctions/planAccessRoute/index.js 的 APP_ID。前后端 AppID 必须属于同一使用者账号；占位值不能用于真实运行。
 4. 登录自己的微信小程序账号，开发者工具导入项目根目录。miniprogramRoot=miniprogram/，cloudfunctionRoot=cloudfunctions/。使用者自行开通并关联 CloudBase，创建 routes 和 navigation_limits 集合并设置安全规则。
 5. 仅导入六个 data/routes/*-import.json，保留稳定 ID；每条只导入一次，遇已有 ID 先核对，不自动覆盖。普通 JSON 与 Import 是同一对象，不要各导入一遍。
-6. 当前Access阻断；未来须先落实可访问的政策阅读入口、逐次第三方同意、本账号隐私/接口条件并获得单独部署授权。届时需要真实 Access 时，在自己的环境部署 planAccessRoute 并云端安装该目录依赖，配置服务端环境变量 AMAP_WEB_SERVICE_KEY、接口准入与隐私指引。仅浏览地图不需要高德 Key；模拟不要求真实定位。**本次发布准备没有执行任何部署或云数据写入。**
+6. 当前Access阻断；已有政策阅读通道与逐次第三方同意契约；未来仍需本账号适用平台条件、真实请求授权及受控联调，不能自动启用或部署。届时需要真实 Access 时，在自己的环境部署 planAccessRoute 并云端安装该目录依赖，配置服务端环境变量 AMAP_WEB_SERVICE_KEY、接口准入与隐私指引。仅浏览地图不需要高德 Key；模拟不要求真实定位。**本次发布准备没有执行任何部署或云数据写入。**
 7. 编译后应能进入首页、六路线列表与详情，看到绿色轨迹和节点；005/006/009/011出现B1模拟，008/010出现原生速览。首次独立账号/云环境的完整导入、编译、权限拒绝与接驳流程仍标记“待独立环境复验”。
 
 详细数据库规则、服务端配置、导入清单与错误处理见[运行与安全](docs/RUNNING_AND_SECURITY.md)。不要使用项目所有者的云资源，不要用关闭鉴权或关闭 urlCheck 代替有效环境配置。
@@ -85,7 +89,7 @@ node scripts/check-trail-simulation-page.cjs
 node scripts/check-native-route-overview.cjs
 ~~~
 
-公开Runner配置20项；当前正式工作区Follow专项77组、B1核心12组、页面模拟19组、Native40组。Day4-D4直接工作区相关回归已通过；本轮仅整理文档和清单，未重跑业务测试或全量Runner。测试使用六条正式路线，包含普通/密采样回放、B1旧失败负控制及当前算法。测试过程创建系统临时目录，不写正式路线或访问生产 CloudBase。
+公开Runner配置20项。Day5-D8/D8R报告记录正式Follow92组及相关回归通过；早期Follow77组、B1核心12组、页面模拟19组、Native40组为对应阶段证据。本轮仅运行文案相关页面检查和WXML离线编译，未重跑全量Runner或六路线回放。测试使用六条正式路线，包含普通/密采样回放、B1旧失败负控制及当前算法。测试过程创建系统临时目录，不写正式路线或访问生产 CloudBase。
 
 这些是本地自动验证，不是设备地图渲染、真实 GPS 或微信审核成绩；脚本中的历史日期/手工验收 PENDING 文本不代替实际运行日期或最新人工记录。详见[测试说明](docs/TESTING.md)。
 
@@ -94,7 +98,7 @@ node scripts/check-native-route-overview.cjs
 以下为V0.2历史用户验收，不代表V0.3完整导航验收：六路线演示已由用户在电脑微信开发者工具与 Android 按不超过20秒的作品集标准接受。最终文案、006/010控制横排及短播、正常地图/Waypoint/Native/Access响应、返回重进也已获双端用户确认；助手没有把用户确认提升成独立设备实测。四条B1没有逐条精确秒数或原始运行时B1摘要；本轮没有独立复核实时Access的成功蓝线/受限提示细分。
 
 - 008/010特殊重播/退出操作存在已条件接受的 faceTo 渲染层 Console 警告：**尚未修复，也未由官方确认是SDK Bug**；不是商业全平台零错误保证。
-- V0.3私人开发/体验版本已有真实GPS入口，正式release仍拒绝启动；真实Access仍受政策阅读门阻断，虚拟GPS和原生动画不等于户外位置采集。
+- V0.3私人开发/体验版本已有真实GPS入口，正式release仍拒绝启动；真实Access按用户决定暂缓且产品请求硬门保持关闭，虚拟GPS和原生动画不等于户外位置采集。
 - 当前账号接口和隐私用途已有所有者确认，属于OWNER_CONFIRMED，正式平台一致性仍未独立核验。GitHub公开源码、本地运行和微信审核上线分别判断；没有宣称已获微信官方审核或正式上线。
 - 轨迹及难度/时长为展示参考，当前通行条件需另核实，不承诺所有路段可走。
 
@@ -113,6 +117,6 @@ node scripts/check-native-route-overview.cjs
 
 ## 后续计划与数据边界
 
-V0.2已公开；V0.3已进入真实前台GPS增强开发。后续正式路线现场验证、阈值校准和Access政策入口仍需分别授权验收；不承诺后台定位、语音、离线或自动重规划，也不增加未验收倍率。
+V0.2已公开；V0.3已进入真实前台GPS增强开发。政策阅读链和三层Access契约已有证据；后续正式路线现场验证、阈值校准及真实Access交付仍需分别授权验收；不承诺后台定位、语音、离线或自动重规划，也不增加未验收倍率。
 
 公开内容不含私人AppID、运行云环境、高德Key、个人定位历史、原始GPX、Seed/Mock、私人验收日志或QA专用测试配置。只保留经审查的历史算法文本供负控制。既有数据来源与代码许可声明保留；六路线授权不等于全部源码授予统一开源许可。

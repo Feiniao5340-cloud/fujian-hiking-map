@@ -1,5 +1,19 @@
 # V0.3 当前实施状态
 
+## 2026-10-29 · Day6-D4 当前交付边界
+
+高德政策阅读按钮及微信指引→补充文档→官方政策阅读链已有用户Android验证；阅读通道、当次明示同意和真实请求许可已解耦。用户已选择方案A：V0.3暂缓真实Access，生产accessRequestsEnabled=false、policyPagePath=null保持。null为历史站内页面字段，不再代表已验证的微信阅读通道缺失；阅读成功不能生成grant或定位。release真实GPS继续由privateFollowBlock阻断。
+
+Day6-D3已只读核对实际部署包、控制台截图及用户报告：部署入口除账号绑定和行尾外与本地安全实现同源；客户端invoke允许认证非匿名身份，navigation_limits禁止客户端读写。当前V0.3客户端关闭不等于所有服务端调用路径全局关闭；未调用线上服务，Key有效性、自动日志及实际事务行为仍未验证。
+
+本轮仅在route-detail WXML提前说明接驳暂缓、调整说明层标题，并将未来定位文案限定为准入满足时显示；处理函数和安全契约未改。新文案待最小可视复验；正常浏览、四B1/两Native及真实GPS控制流保留。新文档是未暂存文件，现有87成员清单属于此前候选快照，未自动纳入这两份手册；未来打包需显式评估，不能声称当前导出已包含。
+
+正式005 Android首位置/起点保护/停止、Nearby连续会话进度/暂停恢复及六正式路线离线回放分别成立；正式Route following、进度、正式页暂停恢复、偏航回归、终点和现场校准仍待，硬件停止独立证据UNKNOWN。历史用户设备结果不提升为Codex独立手机操作。
+
+[3分钟/8分钟演示指南](PORTFOLIO_DEMO_GUIDE.md) · [正式GPS现场手册](V03_GPS_FIELD_ACCEPTANCE_RUNBOOK.md)
+
+以下带日期内容为各阶段记录；当前结论以上节为准。
+
 ## 2026-10-27 · Day4-D5内部候选整理
 
 V0.2已完成公开；V0.3开发中，当前仅整理内部候选源码、依赖和说明，不具备微信正式公开发布资格。Day3结论为DAY3_BASELINE_CLOSED_WITH_LIMITS，停止后的历史计数对比不是独立20秒回调证据（20S_COUNTER_COMPARISON_NOT_DIAGNOSTIC），不重新开启Day3收口。
