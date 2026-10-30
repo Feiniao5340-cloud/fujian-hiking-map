@@ -102,11 +102,11 @@
       </block>
       <view wx:else class="map-message">起点位置暂不可用</view>
       <view class="follow-panel real-follow-panel">
-        <text class="follow-title">真实GPS循迹（前台实验功能）</text>
+        <text class="follow-title">真实GPS循迹</text>
         <text wx:if="{{followPlatformBlock}}" class="follow-warning" role="alert">{{followPlatformBlock}}</text>
         <text class="follow-status">{{followLabels[followState.status]}}</text>
         <text class="navigation-note">仅在本页前台、由您主动开启。退出或切到后台会停止，不自动恢复。不保存或上传位置历史。</text>
-        <text class="navigation-note">真实蓝点来自手机定位，不吸附轨迹。B1进度与模拟演示分开；起点附近需连续确认。</text>
+        <text class="navigation-note">真实蓝点来自手机定位，不吸附轨迹。</text>
         <view class="follow-metrics">
           <text>定位质量：{{followState.qualityText}}</text>
           <text>定位精度：{{followState.accuracyText || '尚无真实位置'}}</text>
@@ -117,15 +117,14 @@
         <text wx:if="{{followState.message}}" class="follow-warning" role="alert">{{followState.message}}</text>
         <text wx:if="{{followState.offRouteStatus === 'suspected'}}" class="follow-warning">疑似偏离路线，请结合现场道路确认。</text>
         <view class="follow-actions">
-          <button class="navigation-button" bindtap="onStartFollowTap" disabled="{{!!followPlatformBlock || followState.cleanupPending || followState.status === 'stopping' || followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused'}}">开始真实循迹（私人测试）</button>
+          <button class="navigation-button" bindtap="onStartFollowTap" disabled="{{!!followPlatformBlock || followState.cleanupPending || followState.status === 'stopping' || followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused'}}">开始真实循迹</button>
           <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following'}}" class="navigation-button" bindtap="onPauseFollowTap">暂停循迹</button>
           <button wx:if="{{followState.status === 'paused'}}" class="navigation-button" bindtap="onResumeFollowTap" disabled="{{!!followPlatformBlock}}">继续循迹</button>
           <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused' || followState.cleanupPending}}" class="navigation-button" bindtap="onStopFollowTap">{{followState.cleanupPending ? '重试停止定位' : '结束循迹'}}</button>
           <button class="navigation-button" bindtap="onFollowRecenterTap" disabled="{{!followState.location || followState.stale || followState.quality !== 'reliable'}}">回到当前位置</button>
-          <button class="navigation-button" bindtap="onViewTrailTap" disabled="{{!mapCenter || mapRenderError}}">查看完整路线</button>
           <button wx:if="{{followState.canComplete}}" class="navigation-button" bindtap="onConfirmFollowTap">确认完成本次循迹</button>
         </view>
-        <button class="navigation-button" bindtap="onCheckFollowPrivacyTap" loading="{{followPrivacyStatus === 'checking'}}" disabled="{{followPrivacyStatus === 'checking'}}">检查隐私授权（不启动定位）</button>
+        <button class="navigation-button" bindtap="onCheckFollowPrivacyTap" loading="{{followPrivacyStatus === 'checking'}}" disabled="{{followPrivacyStatus === 'checking'}}">检查隐私授权</button>
         <button class="navigation-button" bindtap="onFollowPrivacyView">阅读隐私保护指引</button>
         <text class="navigation-note">{{followPrivacyMessage}}</text>
         <view wx:if="{{followPrivacyVisible}}" class="follow-privacy">
@@ -133,9 +132,7 @@
           <button id="follow-privacy-agree" class="navigation-button" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onFollowPrivacyAgree">同意隐私指引</button>
           <button class="navigation-button" bindtap="onFollowPrivacyCancel">暂不授权</button>
         </view>
-        <text class="navigation-note">算法阈值待设备与受控步行校准（CALIBRATION_PENDING）。当前不提供后台定位或专业安全导航。</text>
         <text wx:if="{{nativeRecoveryMessage}}" class="follow-warning" role="alert">{{nativeRecoveryMessage}}</text>
-        <button class="navigation-button" bindtap="onRetryNativeCleanupTap">检查／重试路线速览清理</button>
         <text wx:if="{{accessRecoveryMessage}}" class="follow-warning" role="alert">{{accessRecoveryMessage}}</text>
         <button wx:if="{{accessRecoveryMessage}}" class="navigation-button" bindtap="onAccessRecoveryTap">检查单次定位请求状态</button>
       </view>
