@@ -110,7 +110,7 @@ async function run() {
   await flowDetail.onLoad({ id: flowId });
   assert.equal(flowDetail.data.status, "success");
   assert.equal(flowDetail.data.mapCenter.markers[0].id, 0);
-  assert.equal(flowDetail.data.mapCenter.polyline[0].points.length, 1003);
+  assert.equal(flowDetail.data.mapCenter.polyline[0].points.length, 1004);
   assert.deepEqual(flowDetail.data.mapCenter.polyline[0].points, xiamen.track);
   assert.deepEqual(flowDetail.data.mapCenter.markers.slice(1).map(p => p.id), xiamen.waypoints.map(p => p.id));
   const flowNode = xiamen.waypoints.at(-1);
@@ -124,8 +124,8 @@ async function run() {
   const mapped = mapHarness.page("route-detail");
   assert.equal(mapped.data.mapCenter, null);
   await mapped.onLoad({ id: xiamen._id });
-  assert.equal(mapped.data.mapCenter.latitude, 24.426528);
-  assert.equal(mapped.data.mapCenter.longitude, 118.122046);
+  assert.equal(mapped.data.mapCenter.latitude, 24.428810);
+  assert.equal(mapped.data.mapCenter.longitude, 118.114404);
   assert.equal(mapped.data.mapCenter.markers.length, 1 + xiamen.waypoints.length);
   const startMarker = mapped.data.mapCenter.markers[0];
   assert.equal(typeof startMarker.id, "number");
@@ -136,11 +136,11 @@ async function run() {
   assert.equal(startMarker.callout.display, "ALWAYS", "起点名称直接显示");
   assert(fs.existsSync(path.join(root, "miniprogram", startMarker.iconPath)));
   assert.equal(mapped.data.markers, undefined, "不创建第二套页面 markers 状态");
-  assert.equal(mapped.data.mapCenter.trackPointCount, 1003);
+  assert.equal(mapped.data.mapCenter.trackPointCount, 1004);
   assert.equal(mapped.data.mapCenter.discardedTrackPointCount, 0);
   assert.equal(mapped.data.mapCenter.polyline.length, 1);
-  assert.equal(mapped.data.mapCenter.polyline[0].points.length, 1003);
-  assert.deepEqual(mapped.data.mapCenter.polyline[0].points, xiamen.track, "1003 点原顺序/数值完整保留");
+  assert.equal(mapped.data.mapCenter.polyline[0].points.length, 1004);
+  assert.deepEqual(mapped.data.mapCenter.polyline[0].points, xiamen.track, "1004 点原顺序/数值完整保留");
   assert.equal(mapHarness.logs.filter(log => log.level === "error").length, 0, "正常起点路径无新 Console 错误");
   const { toStartMapData } = require("../miniprogram/utils/map-data");
   const snapshot = JSON.stringify(xiamen);
@@ -170,7 +170,7 @@ async function run() {
       assert(markers[i + 1].width < markers[0].width);
     }
     assert.equal(JSON.stringify(source), before, "Waypoint 适配不改输入");
-    assert.equal(mapped.data.mapCenter.polyline[0].points.length, 1003);
+    assert.equal(mapped.data.mapCenter.polyline[0].points.length, 1004);
     waypointCases.push({ waypoints: count, startMarkers: 1, waypointMarkers: count, totalMarkers: markers.length });
   }
   console.log("Waypoint 0/1/22 本地模拟结果：", JSON.stringify(waypointCases));
@@ -179,7 +179,7 @@ async function run() {
   for (const waypoints of missingCases) {
     const map = toStartMapData({ ...xiamen, waypoints });
     assert.equal(map.markers.length, 1);
-    assert.equal(map.polyline[0].points.length, 1003);
+    assert.equal(map.polyline[0].points.length, 1004);
   }
   for (const patch of [{ latitude: null }, { longitude: "118" }, { latitude: NaN }, { longitude: Infinity },
     { latitude: 91 }, { longitude: 181 }, { latitude: 0, longitude: 0 }, { id: 0 }, { id: -1 },
@@ -230,7 +230,7 @@ async function run() {
   assert.deepEqual(mapped.data.mapCenter.polyline, [], "切到空轨迹不残留上一条折线");
   mapHarness.respond(async () => ({ data: [xiamen] }));
   await mapped.onLoad({ id: xiamen._id });
-  assert.equal(mapped.data.mapCenter.polyline[0].points.length, 1003, "切回厦门恢复完整轨迹");
+  assert.equal(mapped.data.mapCenter.polyline[0].points.length, 1004, "切回厦门恢复完整轨迹");
   for (const name of [undefined, null, "", "   ", 5]) {
     const withoutName = toStartMapData({ ...xiamen, startPoint: { ...xiamen.startPoint, name } });
     assert.equal(withoutName.latitude, xiamen.startPoint.latitude, "名称缺失保留基础地图中心");
@@ -425,13 +425,13 @@ async function run() {
   const boundaryResults = [];
   const cases = [
     { name: "startPoint 缺失", patch: { startPoint: undefined }, map: false },
-    { name: "track 缺失", patch: { track: undefined }, lines: 0, markers: 21 },
-    { name: "track=[]", patch: { track: [] }, lines: 0, markers: 21 },
-    { name: "track 单点", patch: { track: [xiamen.track[0]] }, lines: 0, markers: 21 },
-    { name: "track 非法坐标", patch: { track: [xiamen.track[0], { latitude: null, longitude: 118 }, xiamen.track[1]] }, lines: 1, points: 2, markers: 21 },
-    { name: "waypoints 缺失", patch: { waypoints: undefined }, lines: 1, points: 1003, markers: 1 },
-    { name: "waypoints=[]", patch: { waypoints: [] }, lines: 1, points: 1003, markers: 1 },
-    { name: "waypoint 非法坐标", patch: { waypoints: [xiamen.waypoints[0], { ...xiamen.waypoints[1], latitude: null }] }, lines: 1, points: 1003, markers: 2 }
+    { name: "track 缺失", patch: { track: undefined }, lines: 0, markers: 8 },
+    { name: "track=[]", patch: { track: [] }, lines: 0, markers: 8 },
+    { name: "track 单点", patch: { track: [xiamen.track[0]] }, lines: 0, markers: 8 },
+    { name: "track 非法坐标", patch: { track: [xiamen.track[0], { latitude: null, longitude: 118 }, xiamen.track[1]] }, lines: 1, points: 2, markers: 8 },
+    { name: "waypoints 缺失", patch: { waypoints: undefined }, lines: 1, points: 1004, markers: 1 },
+    { name: "waypoints=[]", patch: { waypoints: [] }, lines: 1, points: 1004, markers: 1 },
+    { name: "waypoint 非法坐标", patch: { waypoints: [xiamen.waypoints[0], { ...xiamen.waypoints[1], latitude: null }] }, lines: 1, points: 1004, markers: 2 }
   ];
   for (const scenario of cases) {
     boundary.respond(async () => ({ data: [routeA] }));
@@ -512,7 +512,7 @@ async function run() {
   h.wx.cloud = undefined;
   await loading.onRetryTap();
   assert.equal(loading.data.status, "error");
-  console.log("通过：云列表→详情及既有错误恢复；Polyline 1003 点原序原值/空态/非法点过滤/Route 切换、Waypoint 0/1/22 与非法节点跳过、稳定唯一 ID、点击卡片稀疏ID/order/说明/跨Route清空、Start Marker/错误降级，正常与坏起点路径无新增 Console error。仅本地 wx.cloud 模拟。");
+  console.log("通过：云列表→详情及既有错误恢复；Polyline 1004 点原序原值/空态/非法点过滤/Route 切换、Waypoint 0/1/22 与非法节点跳过、稳定唯一 ID、点击卡片稀疏ID/order/说明/跨Route清空、Start Marker/错误降级，正常与坏起点路径无新增 Console error。仅本地 wx.cloud 模拟。");
 }
 
 run().catch(error => { console.error(error); process.exitCode = 1; });

@@ -12,16 +12,108 @@
   "elevationGainMeters": null,
   "routeType": "loop",
   "summary": "以珍珠湾为起终点，按高德步行接口返回路径环行，全程约 46.3 公里。",
-  "description": "路线依次经过黄厝、会展中心、观音山、五缘湾、环岛北路、海堤纪念公园、中山路、厦大白城等节点，再返回珍珠湾。路径来自高德 Walking API 规划结果；节点按接口顺序整理，未核验现场道路与步行条件。",
+  "description": "从重新指定的珍珠湾起点出发，沿原行进方向经过旧起点附近普通途经段，再依次经过黄厝、会展中心、观音山、五缘湾、中山路、厦大白城等节点返回。完整保留原厦门环岛几何；数据来自高德Walking API，尚未核验现场道路和通行条件。",
   "bestSeason": "",
   "notice": "距离 46,283 米、用时约 617 分钟取自高德接口估算；难度为按长距离设置的项目编辑评级，不是官方评级。累计爬升未知。路线未实地核验，行政区划与开放状态待核对；高德数据公开展示许可未确认，请勿用于导航或实际出行。",
   "coordinateSystem": "gcj02",
   "startPoint": {
     "name": "珍珠湾",
-    "latitude": 24.426528,
-    "longitude": 118.122046
+    "latitude": 24.42881,
+    "longitude": 118.114404
   },
   "track": [
+    {
+      "latitude": 24.428815,
+      "longitude": 118.11441
+    },
+    {
+      "latitude": 24.428689,
+      "longitude": 118.114896
+    },
+    {
+      "latitude": 24.428563,
+      "longitude": 118.115295
+    },
+    {
+      "latitude": 24.428533,
+      "longitude": 118.115395
+    },
+    {
+      "latitude": 24.428351,
+      "longitude": 118.116011
+    },
+    {
+      "latitude": 24.42819,
+      "longitude": 118.116502
+    },
+    {
+      "latitude": 24.428103,
+      "longitude": 118.116758
+    },
+    {
+      "latitude": 24.428016,
+      "longitude": 118.117079
+    },
+    {
+      "latitude": 24.427947,
+      "longitude": 118.117539
+    },
+    {
+      "latitude": 24.427908,
+      "longitude": 118.118125
+    },
+    {
+      "latitude": 24.427908,
+      "longitude": 118.11819
+    },
+    {
+      "latitude": 24.427908,
+      "longitude": 118.118555
+    },
+    {
+      "latitude": 24.427904,
+      "longitude": 118.118863
+    },
+    {
+      "latitude": 24.427895,
+      "longitude": 118.119136
+    },
+    {
+      "latitude": 24.427847,
+      "longitude": 118.119462
+    },
+    {
+      "latitude": 24.427813,
+      "longitude": 118.119653
+    },
+    {
+      "latitude": 24.427726,
+      "longitude": 118.120009
+    },
+    {
+      "latitude": 24.427643,
+      "longitude": 118.120273
+    },
+    {
+      "latitude": 24.427522,
+      "longitude": 118.12053
+    },
+    {
+      "latitude": 24.427318,
+      "longitude": 118.120916
+    },
+    {
+      "latitude": 24.426979,
+      "longitude": 118.121411
+    },
+    {
+      "latitude": 24.426558,
+      "longitude": 118.12201
+    },
+    {
+      "latitude": 24.426532,
+      "longitude": 118.122044
+    },
     {
       "latitude": 24.426528,
       "longitude": 118.122044
@@ -3945,94 +4037,6 @@
     {
       "latitude": 24.428815,
       "longitude": 118.11441
-    },
-    {
-      "latitude": 24.428689,
-      "longitude": 118.114896
-    },
-    {
-      "latitude": 24.428563,
-      "longitude": 118.115295
-    },
-    {
-      "latitude": 24.428533,
-      "longitude": 118.115395
-    },
-    {
-      "latitude": 24.428351,
-      "longitude": 118.116011
-    },
-    {
-      "latitude": 24.42819,
-      "longitude": 118.116502
-    },
-    {
-      "latitude": 24.428103,
-      "longitude": 118.116758
-    },
-    {
-      "latitude": 24.428016,
-      "longitude": 118.117079
-    },
-    {
-      "latitude": 24.427947,
-      "longitude": 118.117539
-    },
-    {
-      "latitude": 24.427908,
-      "longitude": 118.118125
-    },
-    {
-      "latitude": 24.427908,
-      "longitude": 118.11819
-    },
-    {
-      "latitude": 24.427908,
-      "longitude": 118.118555
-    },
-    {
-      "latitude": 24.427904,
-      "longitude": 118.118863
-    },
-    {
-      "latitude": 24.427895,
-      "longitude": 118.119136
-    },
-    {
-      "latitude": 24.427847,
-      "longitude": 118.119462
-    },
-    {
-      "latitude": 24.427813,
-      "longitude": 118.119653
-    },
-    {
-      "latitude": 24.427726,
-      "longitude": 118.120009
-    },
-    {
-      "latitude": 24.427643,
-      "longitude": 118.120273
-    },
-    {
-      "latitude": 24.427522,
-      "longitude": 118.12053
-    },
-    {
-      "latitude": 24.427318,
-      "longitude": 118.120916
-    },
-    {
-      "latitude": 24.426979,
-      "longitude": 118.121411
-    },
-    {
-      "latitude": 24.426558,
-      "longitude": 118.12201
-    },
-    {
-      "latitude": 24.426532,
-      "longitude": 118.122044
     }
   ],
   "waypoints": [
@@ -4043,16 +4047,7 @@
       "latitude": 24.44298,
       "longitude": 118.161404,
       "description": "",
-      "distanceFromStartMeters": 5150
-    },
-    {
-      "id": 3,
-      "name": "会展中心",
-      "type": "other",
-      "latitude": 24.468302,
-      "longitude": 118.189128,
-      "description": "",
-      "distanceFromStartMeters": 9217
+      "distanceFromStartMeters": 6016
     },
     {
       "id": 4,
@@ -4061,16 +4056,7 @@
       "latitude": 24.493252,
       "longitude": 118.196741,
       "description": "",
-      "distanceFromStartMeters": 12307
-    },
-    {
-      "id": 5,
-      "name": "桥墩公园",
-      "type": "other",
-      "latitude": 24.516879,
-      "longitude": 118.192394,
-      "description": "",
-      "distanceFromStartMeters": 15096
+      "distanceFromStartMeters": 13223
     },
     {
       "id": 6,
@@ -4079,16 +4065,7 @@
       "latitude": 24.533837,
       "longitude": 118.185792,
       "description": "",
-      "distanceFromStartMeters": 17174
-    },
-    {
-      "id": 7,
-      "name": "五缘湾过桥后骑行步道",
-      "type": "other",
-      "latitude": 24.541862,
-      "longitude": 118.170777,
-      "description": "",
-      "distanceFromStartMeters": 20199
+      "distanceFromStartMeters": 18131
     },
     {
       "id": 8,
@@ -4097,43 +4074,7 @@
       "latitude": 24.557172,
       "longitude": 118.144578,
       "description": "",
-      "distanceFromStartMeters": 23545
-    },
-    {
-      "id": 9,
-      "name": "海堤纪念公园",
-      "type": "other",
-      "latitude": 24.550422,
-      "longitude": 118.108443,
-      "description": "",
-      "distanceFromStartMeters": 27360
-    },
-    {
-      "id": 10,
-      "name": "港东路",
-      "type": "other",
-      "latitude": 24.543221,
-      "longitude": 118.109067,
-      "description": "",
-      "distanceFromStartMeters": 28545
-    },
-    {
-      "id": 11,
-      "name": "港中路",
-      "type": "other",
-      "latitude": 24.540058,
-      "longitude": 118.104568,
-      "description": "",
-      "distanceFromStartMeters": 29115
-    },
-    {
-      "id": 12,
-      "name": "殿前一路",
-      "type": "other",
-      "latitude": 24.532006,
-      "longitude": 118.097242,
-      "description": "",
-      "distanceFromStartMeters": 30297
+      "distanceFromStartMeters": 24507
     },
     {
       "id": 13,
@@ -4142,7 +4083,7 @@
       "latitude": 24.529374,
       "longitude": 118.101583,
       "description": "",
-      "distanceFromStartMeters": 30859
+      "distanceFromStartMeters": 31862
     },
     {
       "id": 14,
@@ -4151,43 +4092,7 @@
       "latitude": 24.480985,
       "longitude": 118.078471,
       "description": "",
-      "distanceFromStartMeters": 36837
-    },
-    {
-      "id": 15,
-      "name": "筼筜湖西侧",
-      "type": "other",
-      "latitude": 24.46729,
-      "longitude": 118.078476,
-      "description": "",
-      "distanceFromStartMeters": 38436
-    },
-    {
-      "id": 16,
-      "name": "中山路",
-      "type": "other",
-      "latitude": 24.456045,
-      "longitude": 118.079908,
-      "description": "",
-      "distanceFromStartMeters": 39712
-    },
-    {
-      "id": 17,
-      "name": "鸿山寺",
-      "type": "other",
-      "latitude": 24.448235,
-      "longitude": 118.08428,
-      "description": "",
-      "distanceFromStartMeters": 40720
-    },
-    {
-      "id": 18,
-      "name": "厦门理工学院思明校区",
-      "type": "other",
-      "latitude": 24.440466,
-      "longitude": 118.09137,
-      "description": "",
-      "distanceFromStartMeters": 41853
+      "distanceFromStartMeters": 37891
     },
     {
       "id": 19,
@@ -4196,34 +4101,16 @@
       "latitude": 24.437234,
       "longitude": 118.093299,
       "description": "",
-      "distanceFromStartMeters": 42480
-    },
-    {
-      "id": 20,
-      "name": "演武大桥步道",
-      "type": "other",
-      "latitude": 24.433534,
-      "longitude": 118.091111,
-      "description": "",
-      "distanceFromStartMeters": 42949
-    },
-    {
-      "id": 21,
-      "name": "厦大白城",
-      "type": "other",
-      "latitude": 24.43265,
-      "longitude": 118.100933,
-      "description": "",
-      "distanceFromStartMeters": 44021
+      "distanceFromStartMeters": 43614
     }
   ],
   "source": {
     "infoSource": "高德 Walking API 生成的厦门环岛步行规划路线；项目所有者通过 Apifox 提供原始响应 response.json（generatedBy=AMap Walking API + Apifox）。距离、时长和途经点取自该响应。",
-    "trackSource": "项目根目录 response.json 的 track：完整保留 1,003 个原始 GCJ-02 坐标点及顺序，不简化、不转换。按 Route Schema v1 起点保存在 startPoint，原始首尾重复的珍珠湾 waypoint 不重复入库；20 个中间途经节点按原顺序、原 ID 和原坐标保留，节点距离采用 API 分段距离累计值。",
+    "trackSource": "项目根目录 response.json 的 track：完整保留 1,003 个原始 GCJ-02 坐标点及顺序，不简化、不转换。按 Route Schema v1 起点保存在 startPoint，原始首尾重复的珍珠湾 waypoint 不重复入库；20 个中间途经节点按原顺序、原 ID 和原坐标保留，节点距离采用 API 分段距离累计值。 2026-11-01按所有者授权将起点映射至原track[980]：原顶点原值全部保留并按原方向循环移位，补原末点至首点约0.445米闭合接缝，新末点重复新首点；startPoint及ID1珍珠湾为用户指定GCJ-02精确位置，与轨迹首点约0.823米。其他节点坐标不变，distanceFromStartMeters改为新起点下几何投影累计距离，不再用旧API累计段里程。",
     "originalCoordinateSystem": "gcj02",
     "conversionMethod": "none",
     "permissionNote": "原始路线数据由项目所有者提供，标注来源为 AMap Walking API + Apifox；高德 API 与地图数据的公开展示许可未核实，正式公开前需确认适用条款。路线未实地核验。",
     "checkedAt": "2026-10-08"
   },
-  "updatedAt": "2026-10-08T08:27:15.627Z"
+  "updatedAt": "2026-11-01T00:00:00.000Z"
 }

@@ -19,7 +19,7 @@ const testAppId = require(path.join(root, "project.config.json")).appid;
 // 固定公开路线测试点，非用户当前位置；不修改Route，不将fixture当真实高德结果。
 const fixedWaypoint = route.waypoints.find(p => p.id === 2);
 const fixedRequest = {
-  origin: { longitude: route.track[104].longitude, latitude: route.track[104].latitude },
+  origin: { longitude: route.track[127].longitude, latitude: route.track[127].latitude },
   destination: { longitude: fixedWaypoint.longitude, latitude: fixedWaypoint.latitude }
 };
 function validCoordinate(p) {
@@ -151,7 +151,7 @@ async function run() {
     assert.equal(JSON.stringify(plan.call.data.destination), JSON.stringify({ latitude: selected.latitude, longitude: selected.longitude }));
     plan.call.success({ result: response }); await plan.pending;
     assert.equal(c.page.data.accessRoute.status, "success"); assert.equal(c.page.data.mapPolylines.length, 2);
-    assert.equal(c.page.data.mapPolylines[1].color, "#2F80ED"); assert.equal(c.page.data.mapIncludePoints.length, 1005);
+    assert.equal(c.page.data.mapPolylines[1].color, "#2F80ED"); assert.equal(c.page.data.mapIncludePoints.length, 1006);
     assert.equal(c.page.data.accessSummary.distance, "215 m"); assert.equal(c.page.data.accessSummary.minutes, 3);
     assert.equal(JSON.stringify(c.page.data.route), before); assert.equal(c.page.data.mapCenter, trail); assertTrail(c);
     // 重新规划先清旧Access，然后替换而不是追加。
@@ -405,7 +405,7 @@ async function run() {
     [{ ...validBody, route: { paths: [{ distance: "10", duration: "20", steps: [{ polyline: pair(navPoints[0])+";broken;"+pair(navPoints[1]) }] }] } }, "INVALID_RESPONSE"],
     [{ ...validBody, route: { paths: [{ distance: "", duration: "20", steps: [{ polyline: navPoints.slice(0,2).map(pair).join(";") }] }] } }, "INVALID_RESPONSE"],
     [{ ...validBody, route: { paths: [{ distance: "10", duration: "20", steps: [{ polyline: [navPoints[0],navPoints[0]].map(pair).join(";") }] }] } }, "ROUTE_UNAVAILABLE"],
-    [{ ...validBody, route: { paths: [{ distance: "10", duration: "20", steps: [{ polyline: Array.from({ length: 5001 }, (_, i) => pair(route.track[i % route.track.length])).join(";") }] }] } }, "ROUTE_TOO_LARGE"]]) {
+    [{ ...validBody, route: { paths: [{ distance: "10", duration: "20", steps: [{ polyline: Array.from({ length: 5001 }, (_, i) => pair(route.track[i % (route.track.length - 1)])).join(";") }] }] } }, "ROUTE_TOO_LARGE"]]) {
     s.advance(60000); s.setBody(body); const beforeLogs = s.diagnostics.length;
     const result = await s.main(request); assert.equal(result.errorCode, code);
     if (code === "WALKING_RANGE_EXCEEDED") assert.equal(s.diagnostics.length, beforeLogs, "距离限制不再作为未知上游故障打印诊断");
@@ -439,7 +439,7 @@ async function run() {
   }
   globalLimit.setContext({ OPENID: "user-last", APPID: testAppId, SOURCE: "wx_client" });
   assert.equal((await globalLimit.main(request)).errorCode, "RATE_LIMITED"); assert.equal(globalLimit.requests.length, 200);
-  assert.equal(textHash(fs.readFileSync(path.join(root, "data/routes/xiamen-loop.json"))), "06f5a5b111b011d0bb1c5966f3bcf5881f285a185103c8c69f005f12a6141fce");
+  assert.equal(textHash(fs.readFileSync(path.join(root, "data/routes/xiamen-loop.json"))), "e3d7c7a1b1dd612dfc399224cf1f83700f3b639d095c8a999a4ba015341d63d4");
   assert.equal(crypto.createHash("sha256").update(read("data/routes/xiamen-loop.json")).digest("hex"), originalHash);
   const source = read("cloudfunctions/planAccessRoute/index.js");
   assert(!/console\.(log|info|error)\s*\(/.test(source), "不得打印请求/Key/异常正文");

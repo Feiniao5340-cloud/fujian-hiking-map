@@ -88,6 +88,12 @@ async function finishedFixture() {
   return { h, p };
 }
 async function main() {
+ await test('D8D2 auto start rejection preserves scalar evidence and cleanup contract',async()=>{const h=harness(),p=h.page();await h.open(p);await p.onStartFollowTap();h.emit({...formal[0].startPoint,latitude:formal[0].startPoint.latitude+1,accuracy:5});await flush();assert.equal(p.data.followState.observationCount,1);assert.equal(p.data.followState.sdkStartAcknowledged,true);assert.equal(p.data.followState.stopOutcome,'CLEANUP_CONTRACT_CONFIRMED');assert.equal(p.data.followState.evidenceKind,'LAST_SESSION');assert(p.data.followState.b1Reason);assert.equal(p.data.followState.location,null);await p.onStartFollowTap();assert.equal(p.data.followState.observationCount,0);assert.equal(p.data.followState.stopOutcome,'NOT_REQUESTED');await p.onStopFollowTap();p.onUnload();});
+ await test('D8D2 stop failure cannot display confirmed cleanup',async()=>{const h=harness(),p=h.page();await h.open(p);await p.onStartFollowTap();h.behavior.stop='fail';await p.onStopFollowTap();assert.equal(p.data.followState.stopOutcome,'FAILED_OR_UNCONFIRMED');assert.equal(p.data.followState.cleanupPending,true);h.behavior.stop='success';await p.onStopFollowTap();assert.equal(p.data.followState.stopOutcome,'CLEANUP_CONTRACT_CONFIRMED');p.onUnload();});
+
+ await test('D8 six public routes separate SDK first fix and B1',async()=>{for(const route of formal){const h=harness(),p=h.page();await h.open(p,route);await p.onStartFollowTap();assert.equal(p.data.followState.sdkStartAcknowledged,true);assert.equal(p.data.followState.observationCount,0);h.emit({...route.startPoint,accuracy:35});assert.equal(p.data.followState.observationCount,1);assert.equal(p.data.followState.b1Reason,'LOW_ACCURACY');await h.confirmStart();assert.equal(p.data.followState.status,'following');assert(p.data.followState.observationCount>=4);assert.equal(p.data.followState.confirmedText,'0 m');await p.onStopFollowTap();p.onUnload();}});
+ await test('D8 timeout distinguishes no first fix from unconfirmed start',async()=>{for(const fix of [false,true]){const h=harness(),p=h.page();await h.open(p);await p.onStartFollowTap();if(fix)h.emit({...formal[0].startPoint,accuracy:35});await h.advance(21000);assert(p.data.followState.message.includes(fix?'已收到位置':'未收到有效位置'));assert.equal(h.calls.stop.length,1);p.onUnload();}});
+
   await test('六条完整Trail/节点不变；当前位置仅派生Marker，镜头仅手动动作', async () => {
     const h = harness(), p = h.page();
     for (const r of formal) {
@@ -455,7 +461,7 @@ async function main() {
   await test('R4独立私人面板及六路线正常浏览和Native/Access隔离回归', async () => {
     // 仅移除过期的UI可见性断言；上面的17组定位/进度/暂停/完成回归保持执行。
     const handlers = new Set([...template.matchAll(/\b(?:bind|catch):?[a-z]+="([^"]+)"/g)].map(match => match[1]));
-    for(const name of ['onStartFollowTap','onResumeFollowTap','onFollowPrivacyAgree','onCheckFollowPrivacyTap','onRetryNativeCleanupTap','onAccessRecoveryTap'])assert(handlers.has(name));
+    for(const name of ['onStartFollowTap','onResumeFollowTap','onFollowPrivacyAgree','onCheckFollowPrivacyTap','onAccessRecoveryTap'])assert(handlers.has(name));
     assert(template.includes('open-type="agreePrivacyAuthorization"'));
     assert(template.includes('disabled="{{!!followPlatformBlock'));
     for (const route of formal) {

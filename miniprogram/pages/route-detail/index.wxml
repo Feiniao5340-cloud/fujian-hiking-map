@@ -108,6 +108,10 @@
         <text class="navigation-note">仅在本页前台、由您主动开启。退出或切到后台会停止，不自动恢复。不保存或上传位置历史。</text>
         <text class="navigation-note">真实蓝点来自手机定位，不吸附轨迹。</text>
         <view class="follow-metrics">
+          <text>状态记录：{{followState.evidenceKind}} · 停止结果：{{followState.stopOutcome}}</text>
+          <text>SDK启动：{{followState.sdkStartAcknowledged ? '已确认' : '尚未确认'}} · 该记录有效位置：{{followState.observationCount}}次</text>
+          <text>B1状态：{{followState.b1Phase}} · {{followState.b1Reason || '无附加原因'}}</text>
+          <text>历史已确认距离：{{followState.confirmedText}}（沿线位置，非累计步行测距）</text>
           <text>定位质量：{{followState.qualityText}}</text>
           <text>定位精度：{{followState.accuracyText || '尚无真实位置'}}</text>
           <text>最近更新：{{followState.updatedText || '等待真实定位'}}</text>

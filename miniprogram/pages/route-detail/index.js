@@ -18,6 +18,7 @@ function privateFollowBlock() {
 const emptySimulation = () => ({ status: "idle", statusText: "尚未开始",
   playbackText: "0 m · 0.0%", matchedText: "待匹配", remainingText: "待匹配", b1Text: "待匹配", message: "", snapshot: null });
 const emptyFollow = () => ({ status: "idle", message: "", location: null, accuracyText: "", updatedText: "", stale: false, cleanupPending: false,
+  evidenceKind: "NO_SESSION", stopOutcome: "NOT_REQUESTED", sdkStartAcknowledged: false, observationCount: 0, b1Phase: "notStarted", b1Reason: null, confirmedText: "待确认",
   walkedText: "待确认", progressText: "待确认", remainingText: "待确认", quality: "unavailable", qualityText: "等待定位", offRouteStatus: "unknown", canComplete: false });
 const qualityText = quality => ({ reliable: "定位可靠", degraded: "精度较低，进度冻结", unavailable: "精度不足或未知", stale: "位置已过期", jump: "位置跳变，进度冻结", ambiguous: "路段不确定，进度冻结", recovering: "正在重新确认路段" }[quality] || "等待定位");
 const {
@@ -580,11 +581,17 @@ const definition = {
   onSimulationResumeTap() { this.simulationAction("resume"); },
   onSimulationRestartTap() { this.simulationAction("restart"); },
 
+  followEvidence() {
+    const state = this.data.followState;
+    return { sdkStartAcknowledged: state.sdkStartAcknowledged, observationCount: state.observationCount,
+      b1Phase: state.b1Phase, b1Reason: state.b1Reason, confirmedText: state.confirmedText,
+      evidenceKind: state.evidenceKind, stopOutcome: state.stopOutcome };
+  },
   followSummary() {
     const model = this._trailModel, index = this._trailIndex;
     if (!model || !index || !Number.isFinite(model.cursorMeters)) return { walkedText: "待确认", progressText: "待确认", remainingText: "待确认", canComplete: false };
     const walked = Math.max(0, model.cursorMeters - model.startCursorMeters);
-    return { walkedText: walked === 0 ? "0 m" : formatDistance(walked), progressText: `${(model.cursorMeters / index.totalTrackMeters * 100).toFixed(1)}%`,
+    return { confirmedText: model.maxConfirmedMeters <= model.startCursorMeters ? "0 m" : formatDistance(model.maxConfirmedMeters - model.startCursorMeters), walkedText: walked === 0 ? "0 m" : formatDistance(walked), progressText: `${(model.cursorMeters / index.totalTrackMeters * 100).toFixed(1)}%`,
       canComplete: progress.canConfirmCompletion(index, model, Date.now()),
       remainingText: index.totalTrackMeters <= model.cursorMeters ? "0 m" : formatDistance(index.totalTrackMeters - model.cursorMeters) };
   },
@@ -687,6 +694,7 @@ const definition = {
         try {
           const result = progress.updateTrailProgress(this._trailIndex, this._trailModel, location, Date.now());
           this._trailModel = result.state;
+          this.setData({ followState: { ...this.data.followState, observationCount: this.data.followState.observationCount + 1, b1Phase: result.phase, b1Reason: result.reason } });
           if ((resume && result.reason === "RESUME_TOO_FAR") || (!resume && result.phase === "starting" && ["NOT_AT_START", "NO_LOCAL_MATCH", "OFF_ROUTE_OR_PENDING"].includes(result.reason))) {
             this.failFollow({ code: "POSITION_REQUIRED", message: resume ? "请回到暂停时已确认的路段再继续，或结束循迹。" : "请到路线起点附近再开始循迹。" }); return;
           }
@@ -699,7 +707,7 @@ const definition = {
           if (["unavailable", "degraded"].includes(result.locationQuality)) message = "定位精度不足或未知，参考进度暂不更新。";
           else if (result.locationQuality !== "reliable") message = "位置跳变或路段不确定，参考进度暂不更新。";
           else if (result.offRouteStatus === "suspected") message = "疑似偏离轨迹，请结合现场道路与地图确认。";
-          this.setData({ followState: { ...emptyFollow(), ...this.followSummary(), status: confirmed ? "following" : resume ? "resuming" : "starting",
+          this.setData({ followState: { ...emptyFollow(), evidenceKind: "RUNNING", sdkStartAcknowledged: this.data.followState.sdkStartAcknowledged, observationCount: this.data.followState.observationCount, b1Phase: result.phase, b1Reason: result.reason, ...this.followSummary(), status: confirmed ? "following" : resume ? "resuming" : "starting",
             location: visible ? location : null, quality: result.locationQuality, qualityText: qualityText(result.locationQuality), offRouteStatus: result.offRouteStatus,
             accuracyText: location.accuracy === null ? "精度未知" : `约${Math.ceil(location.accuracy)}米`, updatedText: time,
             message },
@@ -713,13 +721,14 @@ const definition = {
       onError: error => { if (current()) this.failFollow(error); }
     });
     this._followSession = session;
-    this.setData({ followState: { ...emptyFollow(), ...this.followSummary(), status: resume ? "resuming" : "starting", message: "正在开启前台定位…" }, followPrivacyVisible: false });
+    this.setData({ followState: { ...emptyFollow(), ...this.followSummary(), evidenceKind: "RUNNING", b1Phase: resume ? "resuming" : "starting", status: resume ? "resuming" : "starting", message: "正在开启前台定位…" }, followPrivacyVisible: false });
     try {
       await session.start();
       if (!current()) return;
+      this.setData({ followState: { ...this.data.followState, sdkStartAcknowledged: true } });
       if (["starting", "resuming"].includes(this.data.followState.status)) this.setData({ followState: { ...this.data.followState, message: "正在获取真实位置，等待起点或原路段确认…" } });
       if (this.data.followState.status !== "following") {
-        this._followFixTimer = setTimeout(() => { if (current()) this.failFollow({ code: "TIMEOUT" }); }, 20000);
+        this._followFixTimer = setTimeout(() => { if (current()) this.failFollow({ code: "TIMEOUT", message: this.data.followState.observationCount === 0 ? "定位SDK已启动，但未收到有效位置，请检查系统定位与微信权限。" : "已收到位置，但尚未确认起点或恢复路段；请检查精度并靠近正确路段后主动重试。" }); }, 20000);
       }
       this._followStaleTimer = setInterval(() => {
         if (!current()) return;
@@ -746,7 +755,7 @@ const definition = {
     const retain = !!(this._trailModel && Number.isFinite(this._trailModel.cursorMeters));
     const stopped = await this.stopFollow(retain ? "paused" : "idle");
     if (this._unloaded || this._hidden || this._followVersion !== version + 1 || !stopped) return;
-    this.setData({ followState: { ...emptyFollow(), ...this.followSummary(), status: retain ? "paused" : error.code === "LOCATION_DENIED" ? "permissionDenied" : "error",
+    this.setData({ followState: { ...emptyFollow(), ...this.followEvidence(), ...this.followSummary(), status: retain ? "paused" : error.code === "LOCATION_DENIED" ? "permissionDenied" : "error",
       message: error.message || trailFollow.errorMessage(error.code) } });
   },
 
@@ -763,20 +772,21 @@ const definition = {
     if (target === "paused" && this._trailModel && Number.isFinite(this._trailModel.cursorMeters)) this._trailModel = progress.pauseProgressState(this._trailIndex, this._trailModel);
     else { this._trailIndex = null; this._trailModel = null; if (target === "paused") target = "idle"; }
     const session = this._followSession;
-    const finalState = { ...emptyFollow(), ...this.followSummary(), ...(summary ? { walkedText: summary.walkedText, progressText: summary.progressText, remainingText: summary.remainingText } : {}),
+    const finalState = { ...emptyFollow(), ...this.followEvidence(), ...this.followSummary(), evidenceKind: session ? "LAST_SESSION" : this.data.followState.evidenceKind, ...(summary ? { walkedText: summary.walkedText, progressText: summary.progressText, remainingText: summary.remainingText } : {}),
       canComplete: false, status: target, message: target === "paused" ? "循迹已暂停，返回前台后需主动继续。" : target === "ended" ? "循迹已结束，未记录位置历史。" : "" };
-    if (!this._unloaded) this.setData({ followState: { ...finalState, status: session ? "stopping" : target },
+    if (!this._unloaded) this.setData({ followState: { ...finalState, status: session ? "stopping" : target, stopOutcome: session ? "PENDING" : finalState.stopOutcome },
       followCamera: false, followPrivacyVisible: false, mapMarkers: this.data.mapCenter ? this.data.mapCenter.markers : [] });
     if (!session) { this.releaseNavigationMode(this._realModeClaim); this._realModeClaim = null; return true; }
     try {
       await session.stop();
+      finalState.stopOutcome = "CLEANUP_CONTRACT_CONFIRMED";
       this.releaseNavigationMode(this._realModeClaim);
       this._realModeClaim = null;
       if (this._followSession === session) this._followSession = null;
       if (!this._unloaded && version === this._followVersion) this.setData({ followState: finalState });
       return true;
     } catch (_) {
-      if (!this._unloaded && version === this._followVersion) this.setData({ followState: { ...finalState, status: "error", cleanupPending: true, message: trailFollow.errorMessage("STOP_FAILED") } });
+      if (!this._unloaded && version === this._followVersion) this.setData({ followState: { ...finalState, status: "error", stopOutcome: "FAILED_OR_UNCONFIRMED", cleanupPending: true, message: trailFollow.errorMessage("STOP_FAILED") } });
       return false;
     }
   },
