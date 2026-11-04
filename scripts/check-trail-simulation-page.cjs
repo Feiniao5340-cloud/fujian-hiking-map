@@ -34,7 +34,7 @@ const protectedHashes = {
   // Day5-D7 approved reader/request contract candidate; Route/B1 and all other guards remain unchanged.
   "miniprogram/services/navigation-service.js": "1acdc7c94bebf5dc52d6e589975d3c66ed483962dc326793ec53a08092acdbac",
   // Day2 authorized service repair; all other original protected hashes remain unchanged.
-  "miniprogram/services/trail-follow-service.js": "048a57639866a4a4f33c6270c24ef1f896756f115ca7dccf02297ef1741ea842",
+  "miniprogram/services/trail-follow-service.js": "3e54d521ad718844ddd56de5fe912747a73ea4d5fd893550832eb40af55d7add",
   "miniprogram/utils/map-data.js": "d72e158c3863dbed910bd1d262c5b3c0b616455f467e0a8132a97b7cc7cb229e",
   "miniprogram/utils/trail-progress.js": "11430fe6002eb91bbf82e20e216e890b72f7314003f56f6b7896ba669bd6ef86",
   "scripts/formal-route-fixtures.cjs": "87064f60ed695dd59e38b6a30d9e9582911b9a55df2df67fed3b1fed7453d5d9"

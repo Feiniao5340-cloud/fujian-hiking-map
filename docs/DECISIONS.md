@@ -58,3 +58,32 @@ CloudBase线上未改、未读回，手机仍从routes读取，不能说已加�
 ### 2026-11-01 · 珍珠湾仅保留起点
 
 按用户反馈，移除重叠的珍珠湾ID1 Waypoint，8减至7节点；保留珍珠湾startPoint及独立ID0起点Marker。1004点track及所有非Waypoint字段不变。保留其他节点稳定ID，起点确认/B1/真实GPS逻辑不改。私人载体本地数据同步，尚待Android重新加载；历史要求保留ID1被本次最新指令替代。
+
+
+## 2026-11-02 · V0.3数据隔离候选（待批准）
+
+不覆盖共享routes/005；优先独立routes_v03集合配合原route-service统一配置，或用户选择独立环境。此为最小方案候选，尚未创建云资源或改service。先交付本地六文档确定性导入包与SHA/指纹清单，保留V0.2读取路径；GPS正式许可须独立于Access且默认关闭。平台和少量专项验证仍须独立批准，不复制私人QA为产品。细节及授权顺序见V03_GPS_RELEASE_PLAN。
+
+
+### 已批准的独立集合适配（待云端人工操作）
+
+用户已明确授权本地适配及routes_v03创建/只读权限/六路线导入读回。正式env.js新增公开routeCollection=routes_v03，cloudEnvId占位不变；route-service列表与详情统一checkedCollection，缺失、错误或旧routes配置在数据库调用前拒绝，云读取失败不回落旧数据。真实GPS门与Access不变。四个现有列表/详情/多路线相关检查通过，新导出检查附加错误配置及不回落负控通过。
+用户要求不使用Computer Use，已停止，不再调用。云端尚未创建集合或写数据，改为用户图形操作协作。单次导入文件D:\LENOVO\V03_ROUTES_V03_SIX_APPROVED_20261102.jsonl，六个唯一正式ID，SHA256=621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff。现有私人QA配置/读取路径未同步，以免覆盖已验收载体。
+
+
+## 2026-11-02 · D2H正式云读取候选本地准备
+
+以正式仓库当前代码构建独立31文件运行候选，不含D2C本地005覆盖或私人配置，集合routes_v03；环境/AppID仍为公开占位，须用户仅在新候选配置正确身份/环境后再真实查询。候选目录：E:/CodexData/fujian-hiking-map-v0.3-d2h-cloud-candidate-20261102。已有旧QA未改。正式service补充schemaVersion/name/updatedAt异常明确拒绝；保留原缺轨迹的文字详情降级和B1无效轨迹阻断，不改变地图/GPS核心。列表/详情、六路线本地模拟、坏配置/查询失败/005缺失/结构异常负控通过；不等于实际SDK云读。17项候选JS语法/WXML离线编译通过。真实平台查询与Android待授权，未上传或发布。
+
+
+## 2026-11-03 · D2H最终真实云读取与Android候选验收
+
+V03_CLIENT_CLOUD_READ_PASS。正式独立候选不含D2C本地005覆盖，基于route-service实际读取routes_v03：DevTools六列表/详情成功，六个原始Route排序键指纹与本地批准对象相符；Android正确候选六路线地图/节点正常，无自动定位；008/010加载、滚动、速览暂停继续及返回正常。005Android原始Route规范化21e04c0f、track c7fb2d5f、1004点/7节点匹配，静止真实SDK启动/首位置及起点保护自动停止CLEANUP_CONTRACT_CONFIRMED，cleanupPending=false、无活动session；停止20秒及重进均不自动定位。来源分别为用户实际摘要/观察，非Node替代。
+
+活动索引顶点引用瞬时值未直接捕获，停止后NOT_STARTED正常；同源路径由无覆盖候选源码data.route→buildTrailIndex、实际云Route/地图身份和真实B1结果核对，保留动态引用字段UNKNOWN，不假装取得独立快照。Native与真实GPS并发互斥不由单独速览操作升级为设备全覆盖；原有本地互斥负控保留。008/010为用户可见流畅性检查，非长时间帧率/耗电量化。release GPS和真实Access保持关闭，后台定位不在范围。未重做D2F或要求再走220米。
+
+
+## 2026-11-04 · D2J：前台GPS发布许可与定位SDK安全清理分离
+选择独立gps-release配置，默认false，严格布尔许可仅用于release准入；develop/trial保持原合法测试。release另查routes_v03、六ID及必要数据/B1合法性；许可不能代替微信隐私、scope授权或现场起点证据。
+复用service可选beforeSdkStart，在实际SDK调用之前重查Page当前版本/资源claim及许可。回调仅返回布尔，不产生授权或定位；失败走原有取消与清理。stop/hide/unload不查许可，避免开关关闭锁死资源。启动已发出后的撤回仍沿现有cancel/late ACK契约，不承诺配置翻转可撤回已发出的SDK调用。
+验证：新增8组Mock含strict false/缺失/字符串、未知环境、错集合/坏Route、六路线strict true、拒绝隐私/权限、授权期间撤销、恢复重查、Native清理等待、卸载迟到回调。业务发布配置false，未开启release/Access/后台定位。

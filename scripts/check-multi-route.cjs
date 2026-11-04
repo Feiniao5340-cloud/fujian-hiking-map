@@ -27,7 +27,7 @@ const wx = { openPrivacyContract(o) { if (o.success) o.success(); }, getPrivacyS
     database(config) {
       assert.equal(config.env, env.cloudEnvId);
       return { collection(name) {
-        assert.equal(name, 'routes'); let filter, fields, limit;
+        assert.equal(name, 'routes_v03'); let filter, fields, limit;
         return { where(v) { filter = v; return this; }, field(v) { fields = v; return this; }, limit(v) { limit = v; return this; },
           async get() {
             let rows = [...documents.values()].filter(r => !filter || r._id === filter._id).slice(0, limit);

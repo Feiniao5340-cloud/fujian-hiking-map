@@ -31,7 +31,7 @@ function validLocation(point) {
     && Math.abs(point.latitude) <= 90 && Math.abs(point.longitude) <= 180
     && !(point.latitude === 0 && point.longitude === 0);
 }
-function createSession({ onLocation, onError }) {
+function createSession({ onLocation, onError, beforeSdkStart = () => true }) {
   let cancelled = false, requested = false, pending = false, started = false, listening = false, errorListening = false;
   let startSettled = Promise.resolve(), startPromise = null, stopPromise = null, stopInFlight = null;
   const session = { start, stop, get cancelled() { return cancelled; },
@@ -115,6 +115,7 @@ function createSession({ onLocation, onError }) {
       if (typeof wx.onLocationChangeError === "function" && typeof wx.offLocationChangeError === "function") {
         errorListening = true; wx.onLocationChangeError(errorListener);
       }
+      if (beforeSdkStart() !== true) throw failure("CANCELLED");
       requested = true; pending = true;
       const sdkStart = new Promise((resolve, reject) => {
         try {

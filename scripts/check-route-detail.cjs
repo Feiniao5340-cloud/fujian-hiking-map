@@ -22,7 +22,7 @@ function harness() {
         assert.equal(options.env, env);
         return {
           collection(name) {
-            assert.equal(name, "routes");
+            assert.equal(name, "routes_v03");
             const query = {};
             return {
               where(value) { query.filter = value; return this; },
@@ -40,7 +40,7 @@ function harness() {
   };
   const serviceModule = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(root, "miniprogram/services/route-service.js"), "utf8"), {
-    wx, module: serviceModule, require() { return { cloudEnvId: env }; }
+    wx, module: serviceModule, require() { return { cloudEnvId: env, routeCollection: "routes_v03" }; }
   });
   function page(pageName) {
     let definition;
@@ -51,6 +51,8 @@ function harness() {
         error(...args) { logs.push({ level: "error", args }); }
       },
       require(name) {
+        if (name === "../../config/gps-release") return require(path.join(root, "miniprogram/config/gps-release.js"));
+        if (name === "../../config/env") return require(path.join(root, "miniprogram/config/env.js"));
         if (name === "../../services/route-service") return serviceModule.exports;
         if (name === "../../utils/format") return require(path.join(root, "miniprogram/utils/format.js"));
         if (name === "../../utils/map-data") return require(path.join(root, "miniprogram/utils/map-data.js"));

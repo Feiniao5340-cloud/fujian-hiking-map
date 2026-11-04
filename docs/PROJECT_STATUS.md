@@ -72,3 +72,68 @@ CloudBase线上未改、未读回，手机仍从routes读取，不能说已加�
 ### 2026-11-01 · 珍珠湾仅保留起点
 
 按用户反馈，移除重叠的珍珠湾ID1 Waypoint，8减至7节点；保留珍珠湾startPoint及独立ID0起点Marker。1004点track及所有非Waypoint字段不变。保留其他节点稳定ID，起点确认/B1/真实GPS逻辑不改。私人载体本地数据同步，尚待Android重新加载；历史要求保留ID1被本次最新指令替代。
+
+
+## 2026-11-02 · D2G当前发布准备（本节优先于历史状态）
+
+D2F正式005核心现场已PASS：起点、following、真实短段推进、静止稳定、非零进度暂停恢复及安全停止/重进；无需因C点缺失重返起点。其他现场能力按独立证据记录。
+正式云service仍读共享routes，新005仅正式本地/私人覆盖，不能将私人版本直接发布。新增离线六路线JSONL导出与负向检查、发布计划，建议待批准采用独立routes_v03集合；未改数据源运行配置或云端，release GPS及Access继续关闭。详见[V0.3 GPS发布计划](V03_GPS_RELEASE_PLAN.md)。后台定位不在范围，不要求走完六路线作为无依据硬门。
+
+
+### 已批准的独立集合适配（待云端人工操作）
+
+用户已明确授权本地适配及routes_v03创建/只读权限/六路线导入读回。正式env.js新增公开routeCollection=routes_v03，cloudEnvId占位不变；route-service列表与详情统一checkedCollection，缺失、错误或旧routes配置在数据库调用前拒绝，云读取失败不回落旧数据。真实GPS门与Access不变。四个现有列表/详情/多路线相关检查通过，新导出检查附加错误配置及不回落负控通过。
+用户要求不使用Computer Use，已停止，不再调用。云端尚未创建集合或写数据，改为用户图形操作协作。单次导入文件D:\LENOVO\V03_ROUTES_V03_SIX_APPROVED_20261102.jsonl，六个唯一正式ID，SHA256=621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff。现有私人QA配置/读取路径未同步，以免覆盖已验收载体。
+
+
+### 控制台导入文件扩展名修正（2026-11-02）
+
+用户真实控制台报InvalidParameter / invalid import filename (only support .json or .csv)，截图routes_v03无记录。原文件内容是逐行JSON，但扩展名.jsonl不被该控制台接受；这是本轮导出命名错误，不是权限或Route数据错误。保留原件，新建字节完全相同的.json副本：D:\LENOVO\V03_ROUTES_V03_SIX_APPROVED_20261102.json；SHA-256仍621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff，逐行解析为6个唯一ID，逐个对象与正式JSON相等。无需重建集合或改权限。导出脚本后续单份文件也改用.json后缀（内容仍逐行文档）；原历史包与清单保留，不伪造之前成功。云端重试及读回仍PENDING。
+
+
+## routes_v03导出精确核对通过（2026-11-02，最新结论）
+
+用户提供恢复后的database_export-f2JqKi86rtd_.json，实际读取为6行JSON文档。导出原文件SHA-256=621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff，与获准六路线导入文件整文件SHA完全相同。六ID唯一且完整，各Route整对象、全部track点序/原值、startPoint、Waypoint、updatedAt逐项与正式JSON及获准包深度相等，无新增/缺失字段。005为1004点/7节点。
+
+结果：SIX_ROUTE_CLOUD_EXPORT_CONTENT_MATCH_PASS。来源为USER_SUPPLIED_CLOUD_EXPORT（用户表示来自routes_v03）+LOCAL_EXACT_COMPARISON；Codex未直接登录抓取数据库，不把导出内容比对升级为客户端SDK实际查询成功、权限独立验证或V0.2云数据独立复验。新集合存在、权限read=true/write=false及导入成功为用户控制台反馈。
+
+此前CLOUD_READBACK_PENDING中的导出内容核对已完成；仍待V03_CLIENT_CLOUD_READ_NOT_TESTED：用无私人005本地覆盖的最新正式service实际读取routes_v03，验证六列表/详情及005地图/B1同源。旧私人载体仍使用既有D2C覆盖，不用于冒充这一数据链已通过。微信调试传输需另行明确批准，本轮没有自动传输。
+
+详细标量核验文件：D:\LENOVO\V03_ROUTES_V03_CLOUD_READBACK_CHECK_20261102.json。没有改原导出或Route源文件，没有Git提交/Push、CloudBase额外写入、release开门或Access启用。
+
+
+## 2026-11-02 · D2H正式云读取候选本地准备
+
+以正式仓库当前代码构建独立31文件运行候选，不含D2C本地005覆盖或私人配置，集合routes_v03；环境/AppID仍为公开占位，须用户仅在新候选配置正确身份/环境后再真实查询。候选目录：E:/CodexData/fujian-hiking-map-v0.3-d2h-cloud-candidate-20261102。已有旧QA未改。正式service补充schemaVersion/name/updatedAt异常明确拒绝；保留原缺轨迹的文字详情降级和B1无效轨迹阻断，不改变地图/GPS核心。列表/详情、六路线本地模拟、坏配置/查询失败/005缺失/结构异常负控通过；不等于实际SDK云读。17项候选JS语法/WXML离线编译通过。真实平台查询与Android待授权，未上传或发布。
+
+
+## 2026-11-03 · D2H最终真实云读取与Android候选验收
+
+V03_CLIENT_CLOUD_READ_PASS。正式独立候选不含D2C本地005覆盖，基于route-service实际读取routes_v03：DevTools六列表/详情成功，六个原始Route排序键指纹与本地批准对象相符；Android正确候选六路线地图/节点正常，无自动定位；008/010加载、滚动、速览暂停继续及返回正常。005Android原始Route规范化21e04c0f、track c7fb2d5f、1004点/7节点匹配，静止真实SDK启动/首位置及起点保护自动停止CLEANUP_CONTRACT_CONFIRMED，cleanupPending=false、无活动session；停止20秒及重进均不自动定位。来源分别为用户实际摘要/观察，非Node替代。
+
+活动索引顶点引用瞬时值未直接捕获，停止后NOT_STARTED正常；同源路径由无覆盖候选源码data.route→buildTrailIndex、实际云Route/地图身份和真实B1结果核对，保留动态引用字段UNKNOWN，不假装取得独立快照。Native与真实GPS并发互斥不由单独速览操作升级为设备全覆盖；原有本地互斥负控保留。008/010为用户可见流畅性检查，非长时间帧率/耗电量化。release GPS和真实Access保持关闭，后台定位不在范围。未重做D2F或要求再走220米。
+
+
+## 2026-11-03 · Day8-D2I偏航回归预检与发布门禁准备
+V03_D2I_RELEASE_PREPARATION_READY / FIELD_TEST_READY（仅本机准备，不是现场偏航PASS或release开放）。
+新增check-trail-deviation.cjs六组SIMULATED负向/恢复测试；005/008/010均通过。既有B1核心、Follow集成、页面模拟、Native及单元回放通过，六路线Schema/索引/起点和轻量性能检查通过。未发现需修改的确定性业务Bug；没有修改GPS/B1/Native/Page运行代码、六轨迹和阈值。D2H候选运行代码无需因本轮再上传，合法私人配置未改。
+真实证据边界：D2F旧载体005核心现场通过；D2H正式云候选六浏览、长路线速览、GPS首位置/起点保护和安全停止通过；该候选following、偏航/回归及Native/GPS冲突设备专项仍待一次集中验证。全终点、其他五条路线现场与硬件独立停止证据未取得，不伪造通过，不要求走完整六路线。
+发布门禁只形成默认关闭的最小开放设计，详见V03_GPS_RELEASE_PLAN.md最新节。Access=false、policyPagePath=null、release门仍原样。005/008稀疏段和008零长相邻段记录为数据精细度限制，未改track。
+桌面交付审查报告与一次现场runbook；用户不需重做220米或600米，不要求无安全步道时强行偏航。无Computer Use、无云写入/微信传输、无Git暂存提交推送或发布。
+
+
+## 2026-11-04 · Day8-D2I-FIELD正式云候选现场专项
+FORMAL_005_D2I_FIELD_CORE_PASS（USER_SUPPLIED_ANDROID_DIAGNOSTIC + USER_REPORTED）。
+一加13/ColorOS16/微信8.0.77，D2H正式routes_v03候选，005 track c7fb2d5f/1004点/7节点；同一连续pageVersion4取得起点following、约50.774米基线增长、偏航suspected持续证据及31秒cursor/max冻结、回归near/连续匹配恢复，再推进cursor约56.721米。P暂停清理契约确认、进度112.399米保留；U主动恢复新版本6，max不补算。
+运行GPS时模拟点击未抢占（无反馈记体验观察）；离页重进无自动定位；008 Native→GPS实际交接后起点保护自动停止，清理契约确认。最后20秒无恢复、重进005正常由用户确认。本专项无需再去珍珠湾补测。
+RETURN_PENDING瞬间、旧页离页停止原始ACK、Native remove原始ACK、008 following→同页Native、独立物理硬件停止未直接取证，按报告保留UNKNOWN/DEVICE_NOT_TESTED；不冒充全六路线/终点/全部异常设备验收。release GPS及Access继续关闭，后台定位不做。未改业务/路线，未提交/推送/部署/传输/发布。
+桌面V03_DAY8_D2I_FIELD_DEVIATION_RECOVERY_ACCEPTANCE_REPORT.md为最终证据入口。下一步可审核并另行授权最小默认关闭Release Gate实现，本轮不自动实施。
+
+
+## 2026-11-04 · Day8-D2J Release GPS门禁实现（默认关闭）
+RELEASE_GATE_IMPLEMENTED_DEFAULT_OFF / RC_LOCAL_PREPARATION，仅本地实现。
+新增config/gps-release.js，foregroundReleaseEnabled严格false。Page保留运行身份/环境检查；release必须严格true、routes_v03、六正式ID、必要Schema/节点及B1索引合法才可进入原启动流程。加载路线后更新按钮阻断状态，开始及继续重新检查，内部startFollow也复核。SDK服务增加可选beforeSdkStart，在隐私/位置授权和Native清理之后、实际SDK调用之前复核页面版本/可见状态/claim/许可；失败沿既有stop清理，不创建新会话系统。停止不受许可开关限制。
+原POLICY/六Route/005起点与7节点不变，真实Access=false，后台定位不做。AppID正则只检查形状，不代替平台账号审核。D2I-FIELD已通过，不再要求重复005核心现场。
+check-trail-follow 104组（新增8组）通过；页面模拟19、Native40、路线详情/列表/多路线/大姆山、routes_v03负控及偏航6组通过，均为Node/Mock。Mock true从未写入生产配置，真实release仍关闭，新代码未上传手机。
+精确CRLF修复env.js 2处、route-service.js 49处、check-route-list.cjs124处，原HEAD均LF，正文/逻辑不变，调用级autocrlf=false diff --check通过；保留测试文件原有CRLF样本。
+RELEASE_FILES_V03_RC_DEFAULT_OFF.txt是本轮准确成员清单，自身作为构建控制文件不计入其描述成员；旧V02/V03历史清单不改。无Git暂存/提交/推送、无云写入/微信上传/审核/发布，旧D2H候选保持原样，尚未包含本轮门禁。当前平台状态USER_VERIFICATION_REQUIRED。

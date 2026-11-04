@@ -6,13 +6,36 @@ const progress = require("../../utils/trail-progress");
 const simulator = require("../../utils/trail-simulator");
 const SIMULATION_MARKER_ID = -2;
 // OWNER_CONFIRMED：当前账号前台接口及含两种位置用途的隐私指引已生效。
-// 私人QA与高德Access政策门分离；不代表平台独立核验或设备PASS。
-function privateFollowBlock() {
+// 前台GPS许可与Access独立；身份形状检查不代替账号归属或平台审核。
+const gpsRelease = require("../../config/gps-release");
+const routeEnvironment = require("../../config/env");
+function privateFollowBlock(route) {
   try {
     const account = wx.getAccountInfoSync().miniProgram;
-    if (!account || !/^wx[0-9a-f]{16}$/i.test(account.appId) || !["develop", "trial"].includes(account.envVersion))
+    if (!account || !/^wx[0-9a-f]{16}$/i.test(account.appId) || !["develop", "trial", "release"].includes(account.envVersion))
       return "真实循迹仅供当前已获准账号的私人开发／体验版测试；请核对运行身份，正式版暂未启用。";
   } catch (_) { return "无法确认私人开发／体验版运行身份，未启动定位。"; }
+  try {
+    if (wx.getAccountInfoSync().miniProgram.envVersion === "release") {
+      if (!gpsRelease || gpsRelease.foregroundReleaseEnabled !== true || routeEnvironment.routeCollection !== "routes_v03")
+        return "正式版前台循迹尚未获准启用。";
+      const ids = ["fj-route-005", "fj-route-006", "fj-route-008", "fj-route-009", "fj-route-010", "fj-route-011"];
+      if (!route || !ids.includes(route._id) || route.schemaVersion !== 1 || typeof route.updatedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(route.updatedAt) || !Number.isFinite(Date.parse(route.updatedAt)) || typeof route.name !== "string" || !route.name.trim() ||
+        !Number.isFinite(route.distanceMeters) || route.distanceMeters <= 0 ||
+        !Number.isInteger(route.estimatedDurationMinutes) || route.estimatedDurationMinutes <= 0 ||
+        !["easy", "moderate", "hard"].includes(route.difficulty) || !Array.isArray(route.waypoints))
+        return "正式路线资料无效，未启动定位。";
+      const seen = new Set();
+      for (const w of route.waypoints) {
+        if (!w || !Number.isInteger(w.id) || w.id <= 0 || seen.has(w.id) || typeof w.name !== "string" || !w.name.trim() ||
+          !["end", "viewpoint", "junction", "other"].includes(w.type) ||
+          !Number.isFinite(w.latitude) || Math.abs(w.latitude) > 90 || !Number.isFinite(w.longitude) || Math.abs(w.longitude) > 180 ||
+          (w.latitude === 0 && w.longitude === 0)) return "正式路线节点无效，未启动定位。";
+        seen.add(w.id);
+      }
+      if (progress.buildTrailIndex(route).status !== "ready") return "正式轨迹索引无效，未启动定位。";
+    }
+  } catch (_) { return "无法确认正式循迹许可，未启动定位。"; }
   return "";
 }
 const emptySimulation = () => ({ status: "idle", statusText: "尚未开始",
@@ -137,6 +160,7 @@ const definition = {
       });
       this.setData({
         status: "success",
+        followPlatformBlock: privateFollowBlock(route),
         mapCenter,
         mapMarkers: mapCenter ? mapCenter.markers : [],
         ...composeNavigationMap(mapCenter, navigation.emptyAccessRoute()),
@@ -603,7 +627,7 @@ const definition = {
   },
   requestFollowStart(resume) {
     if (this._unloaded || this._hidden) return;
-    const block = privateFollowBlock();
+    const block = privateFollowBlock(this.data.route);
     if (block) {
       this.setData({ followPlatformBlock: block, followState: { ...this.data.followState, status: "blocked", message: block } }); return;
     }
@@ -654,6 +678,8 @@ const definition = {
       : { [`mapMarkers[${i}].latitude`]: location.latitude, [`mapMarkers[${i}].longitude`]: location.longitude };
   },
   async startFollow(resume) {
+    const block = privateFollowBlock(this.data.route);
+    if (block) { this.setData({ followPlatformBlock: block, followState: { ...this.data.followState, status: "blocked", message: block } }); return; }
     if (this._unloaded || this._hidden || this.data.status !== "success" || !this.data.mapCenter
       || this.data.mapRenderError || this._followSession || this.data.nativeNavigation.status === "opening") return;
     if (this._followTransition || this._navigationTransition) return;
@@ -689,6 +715,7 @@ const definition = {
     const current = () => !this._unloaded && !this._hidden && version === this._followVersion && route === this.data.route
       && navigationClaims.has(claim);
     const session = trailFollow.createSession({
+      beforeSdkStart: () => current() && !privateFollowBlock(route),
       onLocation: location => {
         if (!current()) return;
         try {

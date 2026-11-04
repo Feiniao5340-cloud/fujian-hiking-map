@@ -13,7 +13,7 @@ const { loadFormalRoutes, routeById, atMeters, gpsOffset } = require('./formal-r
 const core = require('../miniprogram/utils/trail-progress');
 const formal = loadFormalRoutes();
 const flush = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
-function harness(accessPolicy = APPROVED_ACCESS) {
+function harness(accessPolicy = APPROVED_ACCESS, gpsPolicy = { foregroundReleaseEnabled: false }, routeEnv = { routeCollection: "routes_v03" }) {
   let now = 1800000000000, currentRoute = formal[0], listener = null, errorListener = null;
   const timers = new Set(), calls = { privacy: [], authorize: [], locate: [], moves: [], removes: [], start: [], stop: [], camera: [], overview: [], modal: [], cloud: [], native: [], updates: [], order: [], policy: [] };
   const behavior = { privacy: false, deny: false, start: 'success', stop: 'success', envVersion: 'develop' };
@@ -51,6 +51,8 @@ function harness(accessPolicy = APPROVED_ACCESS) {
     if (!definition) {
     vm.runInNewContext(read('miniprogram/pages/route-detail/index.js'), { wx, Date: ClockDate, ...clock, console: { info() {}, error() {} },
       Page(p) { definition = p; }, require(name) {
+        if (name.includes('gps-release')) return gpsPolicy;
+        if (name.includes('config/env')) return routeEnv;
         if (name.includes('trail-follow-service')) return follow;
         if (name.includes('navigation-service')) return nav;
         if (name.includes('native-route-overview')) return nativeModule.exports;
@@ -501,7 +503,7 @@ async function main() {
     const h=harness(),p=h.page();await h.open(p);assert.equal(h.calls.privacy.length,0);assert.equal(h.calls.start.length,0);
     h.behavior.envVersion='release';p.data.followPlatformBlock='';await p.onStartFollowTap();assert.equal(p.data.followState.status,'blocked');
     p.data.followState.status='paused';await p.onResumeFollowTap();assert.equal(p.data.followState.status,'blocked');
-    assert.equal(h.calls.start.length,0);assert.equal(h.calls.authorize.length,0);assert(p.data.followState.message.includes('私人'));p.onUnload();
+    assert.equal(h.calls.start.length,0);assert.equal(h.calls.authorize.length,0);assert(p.data.followState.message.includes('尚未获准'));p.onUnload();
   });
   await test('Day3 explicit privacy check and official agreement event do not automatically start GPS',async()=>{
     const h=harness(),p=h.page();await h.open(p);h.behavior.privacy=true;
@@ -865,6 +867,33 @@ async function main() {
     const h=harness(),p=h.page();h.behavior.envVersion='release';await h.open(p);
     assert.equal(h.nav.getAccessPreflight().ready,true);await p.onStartFollowTap();assert.equal(p.data.followState.status,'blocked');
     assert.equal(h.calls.start.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);p.onUnload();
+  });
+
+  await test('D2J strict release permit failures start zero SDK', async()=>{
+    for(const permit of [false,undefined,'true',1,null]) { const h=harness(undefined,{foregroundReleaseEnabled:permit}),p=h.page();h.behavior.envVersion='release';await h.open(p);await p.onStartFollowTap();assert.equal(h.calls.start.length,0);assert.equal(p.data.followState.status,'blocked');p.onUnload(); }
+    for(const env of ['unknown','',null]) {const h=harness(undefined,{foregroundReleaseEnabled:true}),p=h.page();h.behavior.envVersion=env;await h.open(p);await p.onStartFollowTap();assert.equal(h.calls.start.length,0);p.onUnload();}
+  });
+  await test('D2J wrong dataset IDs schema and index are fail closed', async()=>{
+    for(const collection of ['routes','',undefined]) {const h=harness(undefined,{foregroundReleaseEnabled:true},{routeCollection:collection}),p=h.page();h.behavior.envVersion='release';await h.open(p);await p.onStartFollowTap();assert.equal(h.calls.start.length,0);p.onUnload();}
+    for(const patch of [{_id:'fj-route-999'},{schemaVersion:2},{track:[]},{coordinateSystem:'wgs84'},{distanceMeters:0},{waypoints:[null]}]) {const h=harness(undefined,{foregroundReleaseEnabled:true}),p=h.page();h.behavior.envVersion='release';await h.open(p,{...formal[0],...patch});await p.onStartFollowTap();assert.equal(h.calls.start.length,0);p.onUnload();}
+  });
+  await test('D2J mock true supports six routes but false can always stop', async()=>{
+    for(const route of formal){const permit={foregroundReleaseEnabled:true},h=harness(undefined,permit),p=h.page();h.behavior.envVersion='release';await h.open(p,route);assert.equal(p.data.followPlatformBlock,'');await p.onStartFollowTap();await h.confirmStart();assert.equal(p.data.followState.status,'following');assert.equal(h.calls.start.length,1);permit.foregroundReleaseEnabled=false;await p.onStopFollowTap();assert.equal(p.data.followState.stopOutcome,'CLEANUP_CONTRACT_CONFIRMED');assert.equal(p.getNavigationMode(),'IDLE');p.onUnload();}
+  });
+  await test('D2J release true still requires privacy and location permission',async()=>{
+    for(const mode of ['privacy','deny']){const h=harness(undefined,{foregroundReleaseEnabled:true}),p=h.page();h.behavior.envVersion='release';h.behavior[mode]=true;await h.open(p);await p.onStartFollowTap();assert.equal(h.calls.start.length,0);p.onUnload();}
+  });
+  await test('D2J revoke during authorization prevents SDK and detaches owner',async()=>{
+    const permit={foregroundReleaseEnabled:true},h=harness(undefined,permit),p=h.page();h.behavior.envVersion='release';await h.open(p);h.behavior.holdAuthorize=true;const opening=p.onStartFollowTap();await flush();permit.foregroundReleaseEnabled=false;h.calls.authorize[0].success();await opening;await flush();assert.equal(h.calls.start.length,0);assert.equal(h.listener(),null);assert.equal(p.getNavigationMode(),'IDLE');p.onUnload();
+  });
+  await test('D2J release resume rechecks permission; stop remains allowed',async()=>{
+    const permit={foregroundReleaseEnabled:true},h=harness(undefined,permit),p=h.page();h.behavior.envVersion='release';await h.open(p);await p.onStartFollowTap();await h.confirmStart();await p.onPauseFollowTap();permit.foregroundReleaseEnabled=false;await p.onResumeFollowTap();assert.equal(h.calls.start.length,1);await p.onStopFollowTap();assert.equal(p.getNavigationMode(),'IDLE');p.onUnload();
+  });
+  await test('D2J pending Native cleanup cannot start approved release SDK',async()=>{
+    const h=harness(undefined,{foregroundReleaseEnabled:true}),p=h.page();h.behavior.envVersion='release';await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;const opening=p.onStartFollowTap();await flush();assert.equal(h.calls.start.length,0);assert(h.calls.removes.length);h.calls.removes.at(-1).success();await opening;assert.equal(h.calls.start.length,1);await p.onStopFollowTap();p.onUnload();
+  });
+  await test('D2J approved release late callbacks after unload cannot write',async()=>{
+    const h=harness(undefined,{foregroundReleaseEnabled:true}),p=h.page();h.behavior.envVersion='release';await h.open(p);await p.onStartFollowTap();const old=h.listener();p.onUnload();await flush();const updates=h.calls.updates.length;old({...formal[0].startPoint,accuracy:5});assert.equal(h.calls.updates.length,updates);assert.equal(h.listener(),null);
   });
   for (const name of ['getLocation', 'startLocationUpdate', 'onLocationChange']) assert(config.requiredPrivateInfos.includes(name));
   assert(!config.requiredBackgroundModes); assert(!config.permission['scope.userLocationBackground']);
