@@ -1,6 +1,27 @@
 // Native route overview. No GPS, cloud, B1 matching, or per-frame setData.
 const {buildTrailIndex}=require('./trail-progress');
 const MARKER_ID=-2, TARGET_MS=15500, SEGMENTS=16;
+let lastCleanupDiagnostic=null;
+// A completion callback alone is not a success ACK. Share one outcome across callers.
+function removeMarker(ctx,done){
+ let acknowledged=false;
+ const ack=error=>{if(acknowledged)return;acknowledged=true;done(error);};
+ try{ctx.removeMarkers({markerIds:[MARKER_ID],success:()=>ack(null),fail:()=>ack('NATIVE_REMOVE_FAILED'),
+  complete:result=>{const message=result&&result.errMsg;
+   ack(typeof message==='string'&&/^(?:MapContext\.)?removeMarkers:ok$/.test(message)?null:
+    typeof message==='string'&&/^(?:MapContext\.)?removeMarkers:fail/.test(message)?'NATIVE_REMOVE_FAILED':'NATIVE_REMOVE_UNCONFIRMED');}});
+ }catch(_){ack('NATIVE_REMOVE_FAILED');}
+}
+// The record owns the SDK context and retry operation; no old Page method is needed.
+function settleCleanup(c,done){
+ if(!c){done('NATIVE_OWNER_UNCONFIRMED');return;}
+ if(c.pending){if(c.error)done(c.error);else c.waiters.push(done);return;}
+ if(!c.error){done(null);return;}
+ if(!c.context||typeof c.context.removeMarkers!=='function'){done('NATIVE_REMOVE_UNAVAILABLE');return;}
+ c.pending=true;c.error=null;c.state='REMOVING';c.waiters.push(done);c.recordState();
+ c.timer=setTimeout(()=>{c.timer=null;c.error='NATIVE_REMOVE_TIMEOUT';c.state='TIMED_OUT_UNCONFIRMED';c.recordState();for(const notify of c.waiters.splice(0))notify(c.error);},1500);
+ removeMarker(c.context,c.acknowledge);
+}
 const OVERVIEW_CONFIG=Object.freeze({
  'fj-route-008':Object.freeze({segments:SEGMENTS,targetMs:TARGET_MS,start:'track-first',end:'track-last'}),
  'fj-route-010':Object.freeze({segments:SEGMENTS,targetMs:TARGET_MS,start:'track-first',end:'track-last'})
@@ -33,13 +54,18 @@ function create(route,ctx,options={}){
  const clickedAt=Number.isFinite(options.clickedAt)?options.clickedAt:now();let plan=prepare(route,options.raw);
  const fallbackEnabled=options.strictEndpointFallback===true&&route._id==='fj-route-010'&&!options.raw;
  const meta={routeId:route._id,raw:plan.raw,total:plan.total,count:plan.pieces.length,sourcePoints:plan.sourcePoints};
- let state='idle',token=0,part=0,cursor=0,current=null,watchdog=null,handoff=null,finishAt=null,pauseRequestedAt=null,pauseStartedAt=null,pausedMs=0,disposed=false,eventCapability=false,addPending=false,disposeDone=null;
+ let state='idle',token=0,part=0,cursor=0,current=null,watchdog=null,handoff=null,finishAt=null,pauseRequestedAt=null,pauseStartedAt=null,pausedMs=0,disposed=false,eventCapability=false,addPending=false,disposeDone=null,disposeAcknowledged=false,disposeError=null,removal=null;
+ const disposeWaiters=[];
  const stats={fallbackConfirmations:0,lastFallbackSegment:null,lastFallbackWitness:null,lastFailureState:null,lastConfirmedState:null,moveCalls:0,addCalls:0,removeCalls:0,events:0,incomingEvents:0,eventDetailFields:[],eventMarkerMatches:false,eventCoordinatesValid:false,eventStatusType:null,eventStatusRecognized:false,moveSuccessCount:0,moveCompleteCount:0,moveSuccessAfterMs:null,moveCompleteAfterMs:null,completedSegments:0,nativeDistance:0,earlySuccess:0,lateCallbacks:0,lastError:null,pauseConfirmed:false,resumeCount:0,maxSubmittedPoints:0,callbackMaxSyncMs:0,terminalCount:0,lastTerminalAfterSubmitMs:null,rejectedTerminal:0,completionEvidence:null,lastTerminalEndDistanceMeters:null,lastConfirmedSegment:null,eventCapability:false};
  const snapshot=()=>({runId:options.runId||'ROUTE_OVERVIEW',source:'ROUTE_OVERVIEW',status:state,routeId:meta.routeId,pathMode:meta.raw?'RAW_7035_CAPABILITY_SAMPLE':'RAW_SEGMENTED_OVERVIEW',sourcePoints:meta.sourcePoints,segmentCount:meta.count,completedSegments:stats.completedSegments,progressRatio:cursor/meta.total,elapsedMs:now()-clickedAt,activeElapsedMs:(finishAt===null?now():finishAt)-clickedAt-pausedMs-(pauseStartedAt===null?0:now()-pauseStartedAt),finishedElapsedMs:finishAt===null?null:finishAt-clickedAt-pausedMs,pauseMode:'SEGMENT_BOUNDARY_USER_ACCEPTED',precisionRuntimeTrial:10,precisionTypeConfirmed:false,firstSegmentOnly:!!options.firstSegmentOnly,...stats,currentSegment:current?part:null,currentApiAccepted:!!(current&&current.accepted),currentApiComplete:!!(current&&current.apiComplete),currentWitnessCount:current?current.stage:0,nativePixels:'USER_OBSERVATION_REQUIRED',b1Matched:false,actualOutdoorCompleted:false,strictEndpointFallbackEnabled:fallbackEnabled,currentSegmentState:current?safeState(current):null});
  const publish=()=>notify(snapshot());
  function safeState(c){return Object.freeze({routeId:meta.routeId,segmentZeroBased:part,segmentHuman:part+1,apiAccepted:c.accepted,apiComplete:c.apiComplete,orderedStage:c.stage,orderedProgressRatio:c.progress/c.length,terminalCandidates:c.terminalCandidates,terminalAccepted:c.terminal,confirmed:c.confirmed,strictFallbackEligible:c.strictFallback,strictFallbackLimitMeters:c.strictFallback?c.nearLimit:null,strictFallbackWitness:c.nearWitness});}
  function clear(){if(watchdog!==null)cancel(watchdog);watchdog=null;if(handoff!==null)cancel(handoff);handoff=null;}
- function remove(done){stats.removeCalls++;try{ctx.removeMarkers({markerIds:[MARKER_ID],success(){if(done)done(null);},fail(){stats.lastError=stats.lastError||'NATIVE_REMOVE_FAILED';if(done)done('NATIVE_REMOVE_FAILED');}});}catch(_){stats.lastError=stats.lastError||'NATIVE_REMOVE_FAILED';if(done)done('NATIVE_REMOVE_FAILED');}}
+ function remove(done){
+  if(removal){if(done){if(removal.acknowledged)done(removal.error);else removal.waiters.push(done);}return;}
+  const operation=removal={acknowledged:false,error:null,waiters:done?[done]:[]};stats.removeCalls++;
+  removeMarker(ctx,error=>{operation.acknowledged=true;operation.error=error;if(error)stats.lastError=stats.lastError||error;for(const notify of operation.waiters.splice(0))notify(error);});
+ }
  function error(code){if(disposed||state==='error')return;stats.lastFailureState=current?safeState(current):null;token++;clear();current=null;state='error';stats.lastError=code;remove();publish();}
  function arm(){watchdog=schedule(()=>{if(!disposed&&!['finished','paused'].includes(state))error('NATIVE_REPLAY_TIMEOUT');},plan.raw?6000:20000);}
  function alive(c){return !disposed&&current===c&&c.token===token&&['playing','pausing'].includes(state);}
@@ -102,26 +128,55 @@ function create(route,ctx,options={}){
  }
  function pause(){if(disposed||state!=='playing')return snapshot();state='pausing';pauseRequestedAt=now();stats.pauseConfirmed=false;if(!current){pauseBoundary();return snapshot();}publish();return snapshot();}
  function resume(){if(disposed||state!=='paused')return snapshot();pausedMs+=now()-pauseStartedAt;pauseStartedAt=null;state='playing';stats.resumeCount++;arm();publish();queueTravel();return snapshot();}
- function dispose(done){if(disposed){if(done)done(addPending?'NATIVE_REMOVE_PENDING':null);return;}disposed=true;token++;clear();state='disposed';current=null;disposeDone=done||null;if(!addPending){remove(disposeDone);disposeDone=null;}plan=null;}
+ function dispose(done){
+  if(done){if(disposeAcknowledged){done(disposeError);return;}disposeWaiters.push(done);}
+  if(disposed)return;
+  disposed=true;token++;clear();state='disposed';current=null;
+  disposeDone=error=>{if(disposeAcknowledged)return;disposeAcknowledged=true;disposeError=error;for(const notify of disposeWaiters.splice(0))notify(error);};
+  if(!addPending){remove(disposeDone);disposeDone=null;}plan=null;
+ }
  return {start,pause,resume,dispose,event,getSnapshot:snapshot};
 }
 function enabledRoute(route){return !!getOverviewConfig(route);}
 function install(definition,wx,runId){
  function applicable(page){return enabledRoute(page.data.route);}
  function publish(page,s){if(page._unloaded||page._hidden)return;page.setData({overviewState:{status:s.status,text:({idle:'尚未开始',starting:'正在创建原生动画',playing:'路线速览播放中',pausing:'正在暂停：当前短段走完即停',paused:'已暂停',finished:s.pathMode==='RAW_7035_CAPABILITY_SAMPLE'?'3秒原生样本结束（非最终验收）':'路线速览完成',error:'路线速览暂不可用，请重新播放'}[s.status]||'已停止'),message:s.lastError||'',raw:s.pathMode==='RAW_7035_CAPABILITY_SAMPLE'}});}
- function stop(page){page._nativeOverviewVersion=(page._nativeOverviewVersion||0)+1;if(page._nativeCleanupTimer!=null){clearTimeout(page._nativeCleanupTimer);page._nativeCleanupTimer=null;}const session=page._nativeOverview;page._nativeOverview=null;if(session){session.dispose();page._nativeOverviewLast=session.getSnapshot();}}
+ // Adapter-only cleanup ACK. Geometry and the animation state machine above are unchanged.
+ function stop(page,done){
+  page._nativeOverviewVersion=(page._nativeOverviewVersion||0)+1;
+  if(page._nativeCleanup){const c=page._nativeCleanup;if(done){if(c.error)done(c.error);else c.waiters.push(done);}return;}
+  const session=page._nativeOverview;page._nativeOverview=null;
+  if(!session){if(page.releaseNavigationMode)page.releaseNavigationMode(page._nativeModeClaim);page._nativeModeClaim=null;if(done&&page.data.overviewMode&&page.data.overviewState&&page.data.overviewState.status!=="idle")publish(page,{status:"idle"});if(done)done(null);return;}
+  const c={waiters:done?[done]:[],error:null,pending:true,state:'REMOVING',context:page._nativeMapContext};page._nativeCleanup=c;
+  const routeId=page.data.route&&page.data.route._id;
+  c.recordState=()=>{lastCleanupDiagnostic=Object.freeze({routeId,state:c.state,pending:c.pending,error:c.error,ownerUnloaded:!!page._unloaded,ownerReleased:!page._nativeCleanup});};c.recordState();
+  function settle(error){const waiters=c.waiters.splice(0);for(const notify of waiters)notify(error);}
+  c.timer=setTimeout(()=>{c.timer=null;c.error='NATIVE_REMOVE_TIMEOUT';c.state='TIMED_OUT_UNCONFIRMED';c.recordState();settle(c.error);},1500);
+  c.acknowledge=error=>{if(page._nativeCleanup!==c)return;if(c.timer!=null)clearTimeout(c.timer);c.timer=null;
+   c.pending=false;c.error=error||null;c.state=error?'ACK_FAILED':'ACK_SUCCESS';
+   if(!error){page._nativeCleanup=null;if(page.releaseNavigationMode)page.releaseNavigationMode(page._nativeModeClaim);page._nativeModeClaim=null;publish(page,{status:"idle"});}
+   c.recordState();settle(error||null);
+  };session.dispose(c.acknowledge);page._nativeOverviewLast=session.getSnapshot();
+ }
+ definition.stopNativeOverview=function(done){stop(this,done);};
+ // 只能在上次remove已明确失败后重新发出真实remove；超时但无回执时不重复提交。
+ definition.retryNativeOverviewCleanup=function(done){
+  const page=this,c=page._nativeCleanup;
+  if(!c){stop(page,done);return;}
+  if(c.pending){if(done)done(c.error||'NATIVE_REMOVE_PENDING');return;}
+  settleCleanup(c,done||(()=>{}));
+ };
  const load=definition.loadRoute;definition.loadRoute=async function(...args){stop(this);const pending=load.apply(this,args),version=this._loadVersion;const result=await pending;if(!this._unloaded&&version===this._loadVersion)this.setData({overviewMode:applicable(this),overviewState:{status:'idle',text:'尚未开始',message:'',raw:false}});return result;};
  function begin(page,raw=false,firstSegmentOnly=false){if(page._hidden||page._unloaded||page.data.mapRenderError||page.data.status!=='success')return;
- const clickedAt=Date.now(),route=page.data.route,previous=page._nativeOverview;page._nativeOverview=null;
- const v=page._nativeOverviewVersion=(page._nativeOverviewVersion||0)+1;
- if(page._nativeCleanupTimer!=null){clearTimeout(page._nativeCleanupTimer);page._nativeCleanupTimer=null;}
+ if(page.claimNavigationMode){const guard=page.claimNavigationMode('NATIVE_OVERVIEW');if(!guard)return;if(page._nativeModeClaim)page.releaseNavigationMode(guard);else page._nativeModeClaim=guard;}
+ const clickedAt=Date.now(),route=page.data.route;
+ const v=(page._nativeOverviewVersion||0)+1;
  const current=()=>!page._hidden&&!page._unloaded&&page._nativeOverviewVersion===v&&page.data.route===route;
- const launch=()=>{if(!current())return;try{const ctx=wx.createMapContext('route-map',page);page._nativeOverview=create(route,ctx,{raw,runId,clickedAt,firstSegmentOnly,strictEndpointFallback:route._id==='fj-route-010',onState:s=>publish(page,s)});page._nativeOverview.start();}
+ const launch=()=>{if(!current())return;
+  if(page.claimNavigationMode&&!page._nativeModeClaim){page._nativeModeClaim=page.claimNavigationMode('NATIVE_OVERVIEW');if(!page._nativeModeClaim)return;}
+  try{const ctx=wx.createMapContext('route-map',page);page._nativeMapContext=ctx;page._nativeOverview=create(route,ctx,{raw,runId,clickedAt,firstSegmentOnly,strictEndpointFallback:route._id==='fj-route-010',onState:s=>publish(page,s)});page._nativeOverview.start();}
  catch(e){page._nativeOverviewLast={runId,source:'ROUTE_OVERVIEW',status:'error',errorCode:e.message};publish(page,{status:'error',lastError:e.message});}};
- if(!previous){launch();return;}
- const timer=setTimeout(()=>{if(current()){page._nativeCleanupTimer=null;page._nativeOverviewVersion++;publish(page,{status:'error',lastError:'NATIVE_REMOVE_TIMEOUT'});}},1500);page._nativeCleanupTimer=timer;
- previous.dispose(error=>{clearTimeout(timer);if(page._nativeCleanupTimer===timer)page._nativeCleanupTimer=null;if(!current())return;if(error)publish(page,{status:'error',lastError:error});else launch();});
- page._nativeOverviewLast=previous.getSnapshot();
+ stop(page,error=>{if(!current())return;if(error){page._nativeOverviewVersion++;publish(page,{status:'error',lastError:error});}else launch();});
  }
  for(const [name,action] of [['onSimulationStartTap','start'],['onSimulationPauseTap','pause'],['onSimulationResumeTap','resume'],['onSimulationRestartTap','restart']]){
   const old=definition[name];definition[name]=function(event){if(!applicable(this))return old.call(this,event);
@@ -129,8 +184,22 @@ function install(definition,wx,runId){
    if(action==='start'){if(this._nativeOverview&&['starting','playing','pausing'].includes(this._nativeOverview.getSnapshot().status))return;begin(this,raw,event&&event.currentTarget&&event.currentTarget.dataset.first==='true');}
    else if(action==='restart')begin(this,raw,event&&event.currentTarget&&event.currentTarget.dataset.first==='true');else if(this._nativeOverview)this._nativeOverview[action]();};}
  definition.onNativeOverviewPoint=function(e){if(this._nativeOverview)this._nativeOverview.event(e);};
- for(const name of ['onHide','onUnload','onBackTap','onMapError']){const old=definition[name];definition[name]=function(...args){stop(this);if(name!=='onUnload'){publish(this,{status:name==='onMapError'?'error':'idle',lastError:name==='onMapError'?'NATIVE_MAP_ERROR':''});}return old.apply(this,args);};}
+ // Controlled navigation must keep the map alive until removal is acknowledged.
+ // System navigation still reaches onUnload directly; its unresolved ACK keeps the lock.
+ const back=definition.onBackTap;definition.onBackTap=function(...args){
+  if(this._nativeBackPending)return this._nativeBackPending;
+  if(!this._nativeOverview&&!this._nativeCleanup)return back.apply(this,args);
+  this._nativeBackPending=(async()=>{
+   const error=await new Promise(resolve=>stop(this,resolve));
+   if(error){publish(this,{status:'error',lastError:error});if(!this._hidden&&!this._unloaded)this.setData({nativeRecoveryMessage:'路线速览尚未确认停止，未离开本页。请检查资源清理；持续无回执时请退出并重新打开小程序。'});return;}
+   if(!this._hidden&&!this._unloaded)return back.apply(this,args);
+  })().finally(()=>{this._nativeBackPending=null;});return this._nativeBackPending;
+ };
+ for(const name of ['onHide','onUnload','onMapError']){const old=definition[name];definition[name]=function(...args){
+  if(name==='onUnload')this._unloaded=true;if(name==='onHide')this._hidden=true;
+  stop(this);if(name!=='onUnload'){publish(this,{status:name==='onMapError'?'error':'idle',lastError:name==='onMapError'?'NATIVE_MAP_ERROR':''});}return old.apply(this,args);
+ };}
  definition.getPlanBSummary=function(){return this._nativeOverview?this._nativeOverview.getSnapshot():this._nativeOverviewLast||{runId,status:'not_started'};};
  return definition;
 }
-module.exports={prepare,position,slice,create,install,enabledRoute,getOverviewConfig,OVERVIEW_CONFIG,MARKER_ID,TARGET_MS};
+module.exports={prepare,position,slice,create,install,settleCleanup,getCleanupDiagnostic:()=>lastCleanupDiagnostic,enabledRoute,getOverviewConfig,OVERVIEW_CONFIG,MARKER_ID,TARGET_MS};

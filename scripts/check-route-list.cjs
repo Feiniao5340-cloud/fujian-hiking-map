@@ -20,7 +20,7 @@ function harness() {
         assert.equal(options.env, expectedEnv);
         return {
           collection(name) {
-            assert.equal(name, "routes");
+            assert.equal(name, "routes_v03");
             return {
               field(value) { fields = value; return this; },
               limit(value) { assert.equal(value, 20); return this; },
@@ -39,7 +39,7 @@ function harness() {
   const serviceModule = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(root, "miniprogram/services/route-service.js"), "utf8"), {
     module: serviceModule, wx,
-    require() { return { cloudEnvId: expectedEnv }; }
+    require() { return { cloudEnvId: expectedEnv, routeCollection: "routes_v03" }; }
   });
   vm.runInNewContext(fs.readFileSync(path.join(root, "miniprogram/pages/routes/index.js"), "utf8"), {
     Page(value) { definition = value; }, wx, console: output,

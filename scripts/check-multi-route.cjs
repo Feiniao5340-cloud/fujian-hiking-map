@@ -1,3 +1,4 @@
+const { APPROVED_ACCESS, consentEvent, startAccess } = require('./access-consent-fixtures.cjs');
 // 六条正式数据 + 真实 Page/service/adapter；微信、云数据库与导航回调均为本地模拟。
 // 不连接 CloudBase，不把模拟蓝线或 Node 耗时当作真机证据。
 const fs = require('node:fs');
@@ -18,7 +19,7 @@ assert.equal(documents.size, formal.length);
 const protectedFiles = fs.readdirSync(path.join(root, 'data/routes')).map(f => 'data/routes/' + f);
 const protectedHashes = protectedFiles.map(f => [f, sha(f)]);
 const calls = { native: [], location: [], cloud: [], navigation: [] }, errors = [];
-const wx = {
+const wx = { openPrivacyContract(o) { if (o.success) o.success(); }, getPrivacySetting(o) { o.success({needAuthorization:false}); }, authorize(o) { o.success(); },
   navigateTo(value) { calls.navigation.push(value); }, navigateBack() {}, redirectTo() {},
   openLocation(value) { calls.native.push(value); }, getLocation(value) { calls.location.push(value); },
   cloud: {
@@ -26,7 +27,7 @@ const wx = {
     database(config) {
       assert.equal(config.env, env.cloudEnvId);
       return { collection(name) {
-        assert.equal(name, 'routes'); let filter, fields, limit;
+        assert.equal(name, 'routes_v03'); let filter, fields, limit;
         return { where(v) { filter = v; return this; }, field(v) { fields = v; return this; }, limit(v) { limit = v; return this; },
           async get() {
             let rows = [...documents.values()].filter(r => !filter || r._id === filter._id).slice(0, limit);
@@ -39,7 +40,7 @@ const wx = {
 };
 function service(file) {
   const module = { exports: {} };
-  vm.runInNewContext(read(file), { module, wx, require: () => env, setTimeout, clearTimeout });
+  vm.runInNewContext(read(file), { module, wx, require: name => name.includes('access-privacy') ? APPROVED_ACCESS : env, setTimeout, clearTimeout });
   return module.exports;
 }
 const routes = service('miniprogram/services/route-service.js');
@@ -67,7 +68,7 @@ function trail(p, r) {
 }
 async function begin(p, r) {
   p.onMarkerTap({ detail: { markerId: r.waypoints[0].id } });
-  const pending = p.onPlanAccessTap(); assert.equal(p.data.accessRoute.status, 'locating');
+  const pending = startAccess(p); await tick(); assert.equal(p.data.accessRoute.status, 'locating');
   assert.equal(calls.location.at(-1).type, 'gcj02');
   const origin = { ...r.track[1] }; calls.location.at(-1).success(origin); await tick();
   assert.equal(p.data.accessRoute.status, 'planning'); const request = calls.cloud.at(-1);
@@ -123,7 +124,7 @@ async function run() {
   // 本轮正式数据没有空节点时，覆盖纯内存空节点边界，不写入正式数据或云。
   const empty = { ...plain(formal[0]), waypoints: [] };
   documents.set(empty._id, empty); const q = page(); await q.onLoad({ id: empty._id }); trail(q, empty);
-  const before = calls.location.length; await q.onPlanAccessTap(); assert.equal(calls.location.length, before);
+  const before = calls.location.length; await startAccess(q); assert.equal(calls.location.length, before);
   assert(q.data.navigationMessage.length > 0); q.onMarkerTap({ detail: { markerId: 1 } }); assert.equal(q.data.selectedWaypoint, null);
   q.onUnload(); documents.delete(empty._id);
   assert.equal(errors.length, 0); protectedHashes.forEach(([f, h]) => assert.equal(sha(f), h));

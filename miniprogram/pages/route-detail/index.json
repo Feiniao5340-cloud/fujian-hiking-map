@@ -1,5 +1,6 @@
 {
   "navigationBarTitleText": "路线详情",
+  "navigationStyle": "custom",
   "navigationBarBackgroundColor": "#F4F1E9",
   "navigationBarTextStyle": "black"
 }
