@@ -69,7 +69,7 @@ docs/           架构、运行安全、数据来源、测试和证据层级
 
 [架构说明](docs/ARCHITECTURE.md) · [运行与安全](docs/RUNNING_AND_SECURITY.md) · [测试说明](docs/TESTING.md) · [验收与版本边界](docs/PORTFOLIO_STATUS.md) · [当前实施状态](docs/PROJECT_STATUS.md)
 
-当前RC采用[95成员清单](RELEASE_FILES_V03_RC_DEFAULT_OFF.txt)，清单自身为构建控制文件，不计入其描述的95项。87成员内部清单及V0.2原清单均是受保护历史，不再当作最新RC成员集。候选构建与微信正式发布资格分别判断。
+当前RC采用[95成员清单](RELEASE_FILES_V03_RC_DEFAULT_OFF.txt)，清单自身为构建控制文件，不计入其描述的95项。87成员内部清单及V0.2原清单均是受保护历史，不再当作最新RC成员集。候选 manifest 的 96 条记录包含这 95 个成员与 1 个构建控制文件，manifest 自身单列。95 项包含业务源码、资源、数据、测试及文档。候选构建与微信正式发布资格分别判断。
 
 ## 产品工作与AI辅助开发
 

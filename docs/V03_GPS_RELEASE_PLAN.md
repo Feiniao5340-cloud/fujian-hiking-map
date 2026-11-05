@@ -46,12 +46,12 @@ privateFollowBlock只接受有效账号形状及develop/trial，release为项目
 ### 已批准的独立集合适配（待云端人工操作）
 
 用户已明确授权本地适配及routes_v03创建/只读权限/六路线导入读回。正式env.js新增公开routeCollection=routes_v03，cloudEnvId占位不变；route-service列表与详情统一checkedCollection，缺失、错误或旧routes配置在数据库调用前拒绝，云读取失败不回落旧数据。真实GPS门与Access不变。四个现有列表/详情/多路线相关检查通过，新导出检查附加错误配置及不回落负控通过。
-用户要求不使用Computer Use，已停止，不再调用。云端尚未创建集合或写数据，改为用户图形操作协作。单次导入文件D:\LENOVO\V03_ROUTES_V03_SIX_APPROVED_20261102.jsonl，六个唯一正式ID，SHA256=621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff。现有私人QA配置/读取路径未同步，以免覆盖已验收载体。
+用户要求不使用Computer Use，已停止，不再调用。云端尚未创建集合或写数据，改为用户图形操作协作。单次导入文件V03_ROUTES_V03_SIX_APPROVED_20261102.jsonl，六个唯一正式ID，SHA256=621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff。现有私人QA配置/读取路径未同步，以免覆盖已验收载体。
 
 
 ### 控制台导入文件扩展名修正（2026-11-02）
 
-用户真实控制台报InvalidParameter / invalid import filename (only support .json or .csv)，截图routes_v03无记录。原文件内容是逐行JSON，但扩展名.jsonl不被该控制台接受；这是本轮导出命名错误，不是权限或Route数据错误。保留原件，新建字节完全相同的.json副本：D:\LENOVO\V03_ROUTES_V03_SIX_APPROVED_20261102.json；SHA-256仍621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff，逐行解析为6个唯一ID，逐个对象与正式JSON相等。无需重建集合或改权限。导出脚本后续单份文件也改用.json后缀（内容仍逐行文档）；原历史包与清单保留，不伪造之前成功。云端重试及读回仍PENDING。
+用户真实控制台报InvalidParameter / invalid import filename (only support .json or .csv)，截图routes_v03无记录。原文件内容是逐行JSON，但扩展名.jsonl不被该控制台接受；这是本轮导出命名错误，不是权限或Route数据错误。保留原件，新建字节完全相同的.json副本：V03_ROUTES_V03_SIX_APPROVED_20261102.json；SHA-256仍621f0b0025fa60ea782a84ddf95f941d8f961de2005839e9326bb3ad2df25cff，逐行解析为6个唯一ID，逐个对象与正式JSON相等。无需重建集合或改权限。导出脚本后续单份文件也改用.json后缀（内容仍逐行文档）；原历史包与清单保留，不伪造之前成功。云端重试及读回仍PENDING。
 
 
 ## routes_v03导出精确核对通过（2026-11-02，最新结论）
@@ -62,7 +62,7 @@ privateFollowBlock只接受有效账号形状及develop/trial，release为项目
 
 此前CLOUD_READBACK_PENDING中的导出内容核对已完成；仍待V03_CLIENT_CLOUD_READ_NOT_TESTED：用无私人005本地覆盖的最新正式service实际读取routes_v03，验证六列表/详情及005地图/B1同源。旧私人载体仍使用既有D2C覆盖，不用于冒充这一数据链已通过。微信调试传输需另行明确批准，本轮没有自动传输。
 
-详细标量核验文件：D:\LENOVO\V03_ROUTES_V03_CLOUD_READBACK_CHECK_20261102.json。没有改原导出或Route源文件，没有Git提交/Push、CloudBase额外写入、release开门或Access启用。
+详细标量核验文件：V03_ROUTES_V03_CLOUD_READBACK_CHECK_20261102.json。没有改原导出或Route源文件，没有Git提交/Push、CloudBase额外写入、release开门或Access启用。
 
 
 ## 2026-11-03 · D2I专项与最小Release Gate方案（未实施开门）
@@ -118,7 +118,7 @@ D2M最终真实证据继续有效：005一次真实Access成功、194点、蓝�
 本轮采用待审核的最小组合方案：仅route-detail使用navigationStyle=custom，顶部“‹ 返回”和底部返回共用既有等待真实remove ACK的退出逻辑；其他页面导航不改。不声称拦截Android系统手势、微信关闭或强杀；这些不可控退出依旧通知清理、未确认则保留owner和明显恢复提示。onUnload不是可阻塞路由销毁的beforeUnload，不能靠返回Promise保证旧MapContext存活。
 Native清理记录持有SDK context/等待者/定时器/ACK状态，由模块settleCleanup直接操作，新页面恢复不依赖旧Page方法。pending或超时但无ACK时不重复移除；明确失败后才可重试；success或complete明确removeMarkers:ok才释放；失败、无明确成功的complete均保持保护。重复dispose与动画错误/卸载共享一次移除，迟到/重复ACK不污染新页面。旧Native未释放时新的Native也拒绝抢占；GPS和Access原保护保留。
 新增6组Follow和3组Native，原110/40及Page19断言保留；Native历史几何/动画Hash仍为原值，仅显式还原本轮获准的三个清理实现片段再验证，并非更换Hash或忽略断言。WXML/WXSS离线编译通过；GUI/Android尚未验证。
-独立候选路径E:/CodexData/fujian-hiking-map-v0.3-d2n-rc-20261105；完整源码指纹与逐文件SHA记录于其D2N_RC_BUILD_MANIFEST.json及桌面D2N报告，避免源码文档自引用Hash。仅复用合法AppID/cloudEnvId两值，私有Access=true、正式Access=false，两侧release GPS=false、routes_v03不变。D2M目录保持原样，未经本轮新许可不传手机代码，不Git暂存/提交/推送。
+独立候选为 D2N Native 退出验收候选；完整源码指纹与逐文件SHA记录于其D2N_RC_BUILD_MANIFEST.json及桌面D2N报告，避免源码文档自引用Hash。仅复用合法AppID/cloudEnvId两值，私有Access=true、正式Access=false，两侧release GPS=false、routes_v03不变。D2M目录保持原样，未经本轮新许可不传手机代码，不Git暂存/提交/推送。
 当前D2N_NATIVE_SYSTEM_EXIT_PARTIAL / ANDROID_REVALIDATION_PENDING：受控顶部替代方案本地通过，需用户审核导航改变并授权最小Android复验；不能宣称原系统箭头或所有系统退出已修复。
 
 D2N最终补充：Native包装器在调用清理前先标记hidden/unloaded，防止同步SDK回执在卸载过程中触发无意义setData；新增该竞态用例，Native最终44组（原40+4）。其余边界和待设备状态不变。
