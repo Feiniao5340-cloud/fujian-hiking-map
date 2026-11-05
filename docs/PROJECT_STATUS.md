@@ -1,5 +1,19 @@
 # V0.3 当前实施状态
 
+## 2026-11-05 · D4.1 视觉验收与 D5 源码对齐
+
+用户确认 Android 初始 GPS 卡片、两行两列按钮、精简模拟卡片及路线详情的视觉验收通过。运行中、弱定位和偏航界面沿用本地验证证据。正式 GPS 与 Access 许可均为 false，V0.3 处于 RC 阶段。下方各阶段待验结论保留为历史。
+
+
+## 2026-11-05 · Day8-D4 最终集成与GPS用户界面收口
+D3.2已由用户确认新顶部左对齐、008速览/返回、真实ACK_SUCCESS及005跨页IDLE/resources=[]通过；原D3-UI-01关闭。D2M一次194点真实接驳成功继续有效，本轮不重复位置外发或高德请求。
+GPS正式卡片删除普通用户可见的会话/SDK/回调计数/B1原因/精度时间/历史投影距离诊断；保留简洁状态、必要按钮和前台停止/不自动恢复/不存位置历史说明。WXML内WXS纯映射只读取followState，Page JS及Native/GPS/B1/授权服务Hash不变；诊断字段与原116组断言完整保留。
+“路线进度/沿路线剩余距离”仅在已following、可靠/未过期且near、现有格式有效时显示，来自既有确认cursor及正式路线总长；不把沿线位置或历史maxConfirmed改名为累计已走距离。低质量、偏航、待确认或无效值隐藏；保留“疑似偏离”程度，不提升算法结论。
+新增6组UI测试，Follow122/Native44/Page19及公开Runner20项本轮通过。旧Runner首项因005 Import多行源格式断言失败；改用既有显式12文件校验模式，Route/Import深度相等和所有原Hash断言仍保留；补齐gps-release依赖和实际运行日期。发布单行JSON由既有导出校验确认，不修改正式数据。
+最终RC从当前正式源码重新构建，GPS=false、Access=false；仅复用已获准的合法本机AppID/cloudEnvId两值，不沿用旧私有Access=true。指纹及逐文件Hash由新候选FINAL_RC_BUILD_MANIFEST.json和桌面D4报告记录，避免源码自引用Hash。D3.1历史目录不变；新卡片Android视觉/新RC设备集成尚未执行，未传代码。
+项目所有者承担产品/路线决策和设备现场验收，Codex协助实现、测试、构建和文档；GitHub公开、微信审核与正式开门是独立授权，当前不暂存/提交/Push/部署/发布。其余路线现场、完整终点、低精度专项及系统手势等未覆盖边界继续保留，不为收口补造通过。
+
+
 ## 2026-10-29 · Day6-D4 当前交付边界
 
 高德政策阅读按钮及微信指引→补充文档→官方政策阅读链已有用户Android验证；阅读通道、当次明示同意和真实请求许可已解耦。用户已选择方案A：V0.3暂缓真实Access，生产accessRequestsEnabled=false、policyPagePath=null保持。null为历史站内页面字段，不再代表已验证的微信阅读通道缺失；阅读成功不能生成grant或定位。release真实GPS继续由privateFollowBlock阻断。
@@ -137,3 +151,34 @@ RELEASE_GATE_IMPLEMENTED_DEFAULT_OFF / RC_LOCAL_PREPARATION，仅本地实现。
 check-trail-follow 104组（新增8组）通过；页面模拟19、Native40、路线详情/列表/多路线/大姆山、routes_v03负控及偏航6组通过，均为Node/Mock。Mock true从未写入生产配置，真实release仍关闭，新代码未上传手机。
 精确CRLF修复env.js 2处、route-service.js 49处、check-route-list.cjs124处，原HEAD均LF，正文/逻辑不变，调用级autocrlf=false diff --check通过；保留测试文件原有CRLF样本。
 RELEASE_FILES_V03_RC_DEFAULT_OFF.txt是本轮准确成员清单，自身作为构建控制文件不计入其描述成员；旧V02/V03历史清单不改。无Git暂存/提交/推送、无云写入/微信上传/审核/发布，旧D2H候选保持原样，尚未包含本轮门禁。当前平台状态USER_VERIFICATION_REQUIRED。
+
+
+## 2026-11-05 · D2M Native清理恢复与Access恢复准备
+用户调整此前“本阶段暂缓真实接驳”的产品安排，要求纳入V0.3恢复准备；正式Access发布许可仍false，未授权位置外发/云部署/微信新传输。
+Native确定性缺口：旧页remove明确失败后，新页没有安全重试入口；stopNative成功未刷新展示状态。现增加跨页清理协调，只对已确认失败且非pending的清理发真实retry；未回执保留锁并拒绝GPS/Access，不强设IDLE；getNavigationResourceSummary仅输出令牌归属/隐藏卸载/清理标量。GPS独占前清理旧Native；Access/原生目标保留合法暂停速览共存，但旧清理异常必须先确认结束。
+新增4组对应测试先失败后修复通过；Follow108/Page19/Native40/导航16及相关路由检查通过，WXML离线编译通过。首次中间实现的无效setData和过度清理破坏既有恢复断言，均在本轮收窄修复，原断言不弱化。
+设备D2L具体是哪条ACK未到仍UNKNOWN，本地可复现机制不冒充已确认设备根因。新RC尚未构建/传输，RC_DEVICE_REVALIDATION_PENDING。
+Access原授权/grant/请求链复用，仅修正阅读成功后与开放条件矛盾的静态提示，并保护旧Native清理异常；私有联调候选配置存桌面，strict true只在候选文件/Mock，不进生产。Mock成功形成独立接驳线，不能写ACCESS_REAL_CALL_PASS。
+当前云部署/Key适用性沿用2026-10-29历史证据，不能升级为今天独立核查；本轮原ZIP未找到，无CloudBase登录/工具直接核验，不擅自部署。需用户只读确认新RC所用环境的函数与Key配置状态，再单独批准候选传输及一次真实位置接驳联调。GPS release=false、Access=false、六Route/005数据/B1/底层GPS未改。未Git提交/Push、无真实高德调用。
+
+
+### 2026-11-05 · D2M Android清理反馈与返回时序修复追加
+用户同步读取确认：008存活页面stopNativeOverview后navigationMode=IDLE、resources=[]、无Native会话/清理挂起/错误、展示idle。异步Console无输出不代表SDK未回调。系统顶部返回卸载008后，新005仍观测到旧008 remove超时挂起；此路径设备阻断尚未解决。
+本地新增受控onBackTap等待真实Native移除ACK后才执行返回；超时留页且持锁，迟到ACK不自动导航。两项新增用例先复现后通过，Follow110/Native40/Page19及route-detail通过，均为本地替身，不是顶部返回设备修复通过。未修改系统导航栏或伪造卸载ACK，新返回修复尚未同步手机。
+用户已分别批准D2M必要私有配置复用、初版候选调试传输及最多一次明确同意后的真实接驳联调；尚未消耗真实规划调用额度。生产Access及release GPS仍false。
+
+
+### 2026-11-05 · D2M真实步行接驳单次联调通过（USER_REPORTED_ANDROID）
+用户在获准的D2M私有候选中主动执行本次规划，读回fj-route-005 accessRoute.status=success、errorCode=null、pointsCount=194、navigationMessage为空、navigationMode=IDLE、resources=[]，并明确确认手机可见接驳蓝线。记录ACCESS_REAL_CALL_PASS，证据为用户Android正常操作、同步页面状态与蓝线观察；不是Mock，也未做独立网络抓包。一次真实联调授权已用于本次操作，不自动重试或继续发起请求。未保存坐标、原始响应或轨迹。
+这只证明私有Access=true候选的本次合法位置→CloudBase→高德规划→临时蓝线正常链路，不代表生产配置已开启、所有异常/距离/网络场景均已实测或发布准入通过。生产Access=false、release GPS=false保持。Native系统顶部返回卸载后的清理回执超时仍为RC阻断；底部受控返回修复仅本地通过，尚未传输手机。无Git提交/Push、无云部署或配置修改、无正式微信上传/审核/发布。
+
+
+## 2026-11-05 · Day8-D2N Native退出候选（待Android复验）
+D2M最终真实证据继续有效：005一次真实Access成功、194点、蓝线可见、完成后IDLE/resources=[]（USER_REPORTED_ANDROID）；本轮不重复定位/高德请求。008页面存活清理通过，但系统顶部返回卸载后的remove回执超时未取得设备修复证据。
+本轮采用待审核的最小组合方案：仅route-detail使用navigationStyle=custom，顶部“‹ 返回”和底部返回共用既有等待真实remove ACK的退出逻辑；其他页面导航不改。不声称拦截Android系统手势、微信关闭或强杀；这些不可控退出依旧通知清理、未确认则保留owner和明显恢复提示。onUnload不是可阻塞路由销毁的beforeUnload，不能靠返回Promise保证旧MapContext存活。
+Native清理记录持有SDK context/等待者/定时器/ACK状态，由模块settleCleanup直接操作，新页面恢复不依赖旧Page方法。pending或超时但无ACK时不重复移除；明确失败后才可重试；success或complete明确removeMarkers:ok才释放；失败、无明确成功的complete均保持保护。重复dispose与动画错误/卸载共享一次移除，迟到/重复ACK不污染新页面。旧Native未释放时新的Native也拒绝抢占；GPS和Access原保护保留。
+新增6组Follow和3组Native，原110/40及Page19断言保留；Native历史几何/动画Hash仍为原值，仅显式还原本轮获准的三个清理实现片段再验证，并非更换Hash或忽略断言。WXML/WXSS离线编译通过；GUI/Android尚未验证。
+独立候选路径E:/CodexData/fujian-hiking-map-v0.3-d2n-rc-20261105；完整源码指纹与逐文件SHA记录于其D2N_RC_BUILD_MANIFEST.json及桌面D2N报告，避免源码文档自引用Hash。仅复用合法AppID/cloudEnvId两值，私有Access=true、正式Access=false，两侧release GPS=false、routes_v03不变。D2M目录保持原样，未经本轮新许可不传手机代码，不Git暂存/提交/推送。
+当前D2N_NATIVE_SYSTEM_EXIT_PARTIAL / ANDROID_REVALIDATION_PENDING：受控顶部替代方案本地通过，需用户审核导航改变并授权最小Android复验；不能宣称原系统箭头或所有系统退出已修复。
+
+D2N最终补充：Native包装器在调用清理前先标记hidden/unloaded，防止同步SDK回执在卸载过程中触发无意义setData；新增该竞态用例，Native最终44组（原40+4）。其余边界和待设备状态不变。

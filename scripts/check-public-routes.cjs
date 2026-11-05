@@ -11,7 +11,7 @@ const { toStartMapData } = require('../miniprogram/utils/map-data');
 const core = require('../miniprogram/utils/trail-progress');
 const root = path.resolve(__dirname, '..');
 const commands = [
-  ['scripts/check-route-data.cjs'], ['scripts/check-route-list.cjs'], ['scripts/check-route-detail.cjs'],
+  ['scripts/check-route-data.cjs', ...Object.values(FILES).flatMap(f=>['data/routes/'+f,'data/routes/'+f.replace('.json','-import.json')])], ['scripts/check-route-list.cjs'], ['scripts/check-route-detail.cjs'],
   ['scripts/check-map-data.cjs'], ['scripts/check-navigation.cjs'], ['scripts/check-multi-route.cjs'],
   ['scripts/check-mountain-route.cjs'], ['scripts/check-gpx-track.cjs'], ['scripts/check-trail-progress.cjs'],
   ['scripts/check-trail-follow.cjs'], ['scripts/check-trail-replay.cjs','--unit'],
@@ -27,7 +27,7 @@ const commands = [
 const scriptFiles = [...new Set(commands.map(c=>c[0])), 'scripts/formal-route-fixtures.cjs', 'scripts/access-consent-fixtures.cjs', 'scripts/text-integrity.cjs',
   'scripts/gpx-to-track.cjs','scripts/prepare-gpx-route.cjs','scripts/prepare-gpx-route.ps1','scripts/check-public-routes.cjs'];
 const sourceFiles = ['project.config.json', 'miniprogram/app.js','miniprogram/app.json','miniprogram/app.wxss','miniprogram/sitemap.json',
-  'miniprogram/config/env.js', 'miniprogram/config/access-privacy.js', 'miniprogram/services/route-service.js','miniprogram/services/navigation-service.js',
+  'miniprogram/config/env.js', 'miniprogram/config/access-privacy.js', 'miniprogram/config/gps-release.js', 'miniprogram/services/route-service.js','miniprogram/services/navigation-service.js',
   'miniprogram/services/trail-follow-service.js','miniprogram/utils/format.js','miniprogram/utils/map-data.js',
   'miniprogram/utils/trail-progress.js','miniprogram/utils/trail-simulator.js','miniprogram/utils/native-route-overview.js', ...['home','routes','route-detail'].flatMap(p=>['js','json','wxml','wxss'].map(ext=>`miniprogram/pages/${p}/index.${ext}`)),
   ...['start','waypoint','location','simulation'].map(n=>`miniprogram/assets/map/${n}.png`),
@@ -75,7 +75,7 @@ for(const args of commands){
 const unchanged=publicTestFiles.every(p=>baseline[p]===digest(path.join(root,p))&&baseline[p]===digest(path.join(candidate,p)));
 assert(unchanged,'检查不得修改来源或候选文件');
 const result=results.length===commands.length&&results.every(r=>r.exitCode===0)?'PASS':'FAIL';
-const evidence={date:'2026-10-13',timezone:'Asia/Shanghai',result,evidenceType:'LOCAL_FORMAL_TRACK_DERIVED_GPS_NOT_PHONE_OR_CLOUD',
+const evidence={date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}),timezone:'Asia/Shanghai',result,evidenceType:'LOCAL_FORMAL_TRACK_DERIVED_GPS_NOT_PHONE_OR_CLOUD',
   reports,commands:results,publicTestFiles,protectedHashes:baseline,candidateDirectory:candidate,
   retiredFilesAbsent:true,sourceAndCandidateUnchanged:unchanged,cloudCalled:false,phoneTested:false};
 const reportFile=path.join(os.tmpdir(),'fujian-day2-task1-public-tests.json');

@@ -58,6 +58,7 @@ const routeOverview = require("../../utils/native-route-overview");
 const navigationClaims = new Set();
 const definition = {
   data: {
+    detailNavigation: { top: 24, height: 44, right: 100 },
     route: null,
     status: "loading",
     mapCenter: null,
@@ -95,23 +96,44 @@ const definition = {
     const real = kind === "REAL_FOLLOW";
     if ([...navigationClaims].some(c => real
       ? c.kind !== "REAL_FOLLOW" && !(c.kind === "NATIVE_OVERVIEW" && c.page === this)
-      : c.kind === "REAL_FOLLOW")) return null;
+      : c.kind === "REAL_FOLLOW" || (c.kind === "NATIVE_OVERVIEW" && (kind === "NATIVE_OVERVIEW" ? c.page !== this : !!c.page._nativeCleanup)))) return null;
     const claim = { kind, page: this };
     navigationClaims.add(claim);
     return claim;
   },
   releaseNavigationMode(claim) { if (claim) navigationClaims.delete(claim); },
+  getNativeCleanupDiagnostic() { return routeOverview.getCleanupDiagnostic(); },
   getNavigationMode() {
     const priorities = ["REAL_FOLLOW", "ACCESS", "NATIVE_TARGET", "NATIVE_OVERVIEW", "B1_SIMULATION"];
     return priorities.find(kind => [...navigationClaims].some(c => c.kind === kind)) || "IDLE";
   },
+  getNavigationResourceSummary() {
+    return [...navigationClaims].map(c => ({ kind: c.kind, routeId: c.page.data.route && c.page.data.route._id,
+      ownerHidden: !!c.page._hidden, ownerUnloaded: !!c.page._unloaded,
+      nativeSession: !!c.page._nativeOverview, cleanupPending: !!(c.page._nativeCleanup && c.page._nativeCleanup.pending),
+      cleanupError: c.page._nativeCleanup && c.page._nativeCleanup.error || null,
+      cleanupState: c.page._nativeCleanup ? c.page._nativeCleanup.state : c.page._nativeOverview ? "ACTIVE" : "OWNER_UNCONFIRMED" }));
+  },
+  async settleNativeClaims(excludePage, cleanupOnly = false) {
+    const pages = [...new Set([...navigationClaims].filter(c => c.kind === "NATIVE_OVERVIEW" && c.page !== excludePage && (!cleanupOnly || c.page._nativeCleanup || !c.page._nativeOverview)).map(c => c.page))];
+    for (const page of pages) {
+      // 只能重试已明确失败的移除；add/remove仍挂起时沿用原等待及超时，绝不伪造ACK。
+      if (!page._nativeOverview && !page._nativeCleanup) return "NATIVE_OWNER_UNCONFIRMED";
+      const cleanup = page._nativeCleanup;
+      if (!cleanup && typeof page.stopNativeOverview !== "function") return "NATIVE_OWNER_UNCONFIRMED";
+      const error = await new Promise(resolve => cleanup ? routeOverview.settleCleanup(cleanup, resolve) : page.stopNativeOverview(resolve));
+      if (error) return error;
+    }
+    return null;
+  },
   prepareNavigationAction(kind) {
     if (this._navigationTransition || this._hidden || this._unloaded) return null;
-    if (!this._followSession) return this.claimNavigationMode(kind);
+    if (!this._followSession && ![...navigationClaims].some(c => c.kind === "NATIVE_OVERVIEW")) return this.claimNavigationMode(kind);
     const route = this.data.route;
     this._navigationTransition = true;
     return (async () => { try {
       if (this._followSession && !await this.stopFollow("paused")) return null;
+      if (await this.settleNativeClaims(null, true)) return null;
       if (this._hidden || this._unloaded || this.data.route !== route) return null;
       return this.claimNavigationMode(kind);
     } finally { this._navigationTransition = false; } })();
@@ -120,6 +142,7 @@ const definition = {
   onLoad(options) {
     this._unloaded = false;
     this._hidden = false;
+    this.updateDetailNavigation();
     const routeId = options && typeof options.id === "string" ? options.id : "";
     if (this._routeId !== routeId) {
       this._loadVersion = (this._loadVersion || 0) + 1;
@@ -276,7 +299,21 @@ const definition = {
     else this.setData({ followCamera: false });
     this.clearNavigation();
   },
-  onShow() { this._hidden = false; },
+  onShow() {
+    this._hidden = false;
+    if (this.getNavigationResourceSummary().some(r => r.kind === "NATIVE_OVERVIEW" && (r.cleanupPending || r.cleanupError || r.ownerUnloaded)))
+      this.setData({ nativeRecoveryMessage: "上一页面路线速览尚未确认清理，新的导航操作保持阻断。可检查资源清理；持续无回执时请退出并重新打开小程序。" });
+  },
+  updateDetailNavigation() {
+    try {
+      if (typeof wx.getWindowInfo !== "function" || typeof wx.getMenuButtonBoundingClientRect !== "function") return;
+      const info = wx.getWindowInfo(), menu = wx.getMenuButtonBoundingClientRect();
+      const top = info.statusBarHeight, height = 2 * (menu.top - top) + menu.height, right = info.windowWidth - menu.left + 8;
+      if (Number.isFinite(top) && top >= 0 && Number.isFinite(height) && height >= 32 && height <= 88 && Number.isFinite(right) && right >= 0 && right < info.windowWidth)
+        this.setData({ detailNavigation: { top, height, right } });
+    } catch (_) { /* Keep a usable back button if window metrics are unavailable. */ }
+  },
+  onResize() { if (!this._hidden && !this._unloaded) this.updateDetailNavigation(); },
 
   navigationSnapshot() {
     if (this._unloaded || this._hidden || this.data.status !== "success") return null;
@@ -376,7 +413,7 @@ const definition = {
       if (!this.accessIntentIsCurrent(intent)) return;
       // 浮层未触发hide时也作废本次意图；阅读成功不能生成或保留同意凭据。
       this.cancelAccessIntent();
-      this.setData({ navigationMessage: "微信隐私保护指引已打开。请在补充文档中主动查看高德官方政策；这不代表已阅读全文或已同意。返回后请重新点击“规划到这里”。真实接驳仍未启用。" });
+      this.setData({ navigationMessage: "微信隐私保护指引已打开。请在补充文档中主动查看高德官方政策；这不代表已阅读全文或已同意。返回后请重新点击“规划到这里”并明确选择本次规划。" });
     }
     catch (_) { if (this.accessIntentIsCurrent(intent)) { intent.policyFailed = true;
       this.setData({ accessConsent: { ...this.data.accessConsent, ready: false, message: "政策阅读入口未能打开。请暂不使用；本次不会定位或规划。" } }); } }
@@ -664,7 +701,7 @@ const definition = {
     this._nativeRetryWaiting = true;
     const route = this.data.route;
     this.setData({ nativeRecoveryMessage: "正在确认路线速览清理，不会自动启动定位…" });
-    const error = await new Promise(resolve => this.retryNativeOverviewCleanup(resolve));
+    const error = await this.settleNativeClaims(null, false);
     this._nativeRetryWaiting = false;
     if (this._unloaded || this._hidden || this.data.route !== route) return;
     this.setData({ nativeRecoveryMessage: error ? "路线速览尚未确认停止。可再次检查清理；若一直失败，请关闭并重新进入小程序。真实GPS保持阻断。" : "路线速览清理已确认。需要定位时请主动点击开始；平台准入仍须核实。" });
@@ -688,6 +725,15 @@ const definition = {
     }
     // 暂停的B1不再推进，但其Marker必须先移除；Native则须等待异步remove确认。
     if (this._simulationSession) this.disposeSimulation();
+    if ([...navigationClaims].some(c => c.kind === "NATIVE_OVERVIEW" && c.page !== this)) {
+      const expectedRoute = this.data.route;
+      this._followTransition = true;
+      try {
+        const error = await this.settleNativeClaims(this);
+        if (this._hidden || this._unloaded || this.data.route !== expectedRoute) return;
+        if (error) { this.setData({ nativeRecoveryMessage: "旧页面路线速览清理尚未确认，请暂不启动定位。" }); return; }
+      } finally { this._followTransition = false; }
+    }
     const claim = this.claimNavigationMode("REAL_FOLLOW");
     if (!claim) { this.setData({ followState: { ...this.data.followState, message: "其他定位请求或地图资源尚未释放，请先结束或确认清理。" } }); return; }
     this._realModeClaim = claim;

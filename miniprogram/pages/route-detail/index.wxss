@@ -1,3 +1,9 @@
+.detail-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #f4f1e9; color: #183e34; }
+.detail-nav-row { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-width: 0; padding-left: 0; box-sizing: border-box; }
+.detail-nav-row .detail-nav-back { flex: 0 0 88px; width: 88px; min-width: 88px; max-width: 88px; margin: 0; padding: 0 8px 0 16px; height: 40px; line-height: 40px; text-align: left; font-size: 16px; background: transparent; color: #183e34; }
+.detail-nav-back::after { border: 0; }
+.detail-nav-row .detail-nav-title { flex: 1 1 0%; min-width: 0; text-align: center; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.native-recovery { margin-bottom: 24rpx; padding: 24rpx; background: #fff3da; font-size: 26rpx; line-height: 1.6; }
 .detail-page {
   min-height: 100vh;
   padding: 27rpx 32rpx 54rpx;
@@ -336,6 +342,10 @@
 .simulation-actions .navigation-button, .simulation-controls .navigation-button { flex: 1; min-width: 110rpx; }
 .real-follow-panel { border-left: 6rpx solid #347cb7; }
 .real-follow-panel .follow-status { color: #235b85; }
+.real-follow-panel .follow-metrics { display: block; }
+.real-follow-panel .navigation-button { min-height: 36px; padding: 4px 6px; line-height: 1.4; display: flex; align-items: center; justify-content: center; }
+.real-follow-panel .follow-actions .navigation-button { flex: 0 0 calc((100% - 16rpx) / 2); width: calc((100% - 16rpx) / 2); min-width: 0; }
+.real-follow-panel .follow-privacy-actions { margin-top: 10rpx; }
 .real-follow-panel .follow-metrics text { display: block; margin: 8rpx 0; }
 .real-follow-panel .follow-privacy { padding: 20rpx; background: #edf4fa; border-radius: 12rpx; }
 .access-consent-mask { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; padding: 32rpx; }

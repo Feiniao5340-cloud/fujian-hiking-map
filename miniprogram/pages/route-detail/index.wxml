@@ -1,4 +1,50 @@
+<wxs module="followUi">
+var labels = { idle: '尚未开始', blocked: '暂未开放', starting: '正在获取定位', resuming: '正在获取定位', following: '正在循迹', paused: '已暂停', stopping: '正在停止定位', ended: '已停止', completed: '已结束', error: '定位暂不可用', permissionDenied: '位置权限未授权' };
+function statusText(s) {
+  if (s.status === 'following' && s.offRouteStatus === 'suspected') return '疑似偏离路线';
+  if (s.status === 'following' && (s.quality !== 'reliable' || s.stale)) return '定位信号较弱';
+  return labels[s.status] || '定位暂不可用';
+}
+function qualityText(s) {
+  if (s.status !== 'starting' && s.status !== 'resuming' && s.status !== 'following' && s.status !== 'error') return '';
+  if (s.quality === 'reliable' && !s.stale) return '定位良好';
+  if (s.quality === 'degraded' || s.quality === 'jump' || s.quality === 'ambiguous' || s.quality === 'recovering') return '定位较弱';
+  if ((s.status === 'starting' || s.status === 'resuming') && !s.stale) return '等待定位';
+  return '定位暂不可用';
+}
+function hasProgress(s) {
+  return s.status === 'following' && s.b1Phase === 'following' && s.quality === 'reliable' && !s.stale && s.offRouteStatus === 'near'
+    && typeof s.progressText === 'string' && s.progressText.match(getRegExp('^[0-9]+([.][0-9]+)?%$')) !== null
+    && parseFloat(s.progressText) >= 0 && parseFloat(s.progressText) <= 100
+    && typeof s.remainingText === 'string' && s.remainingText.match(getRegExp('^[0-9]+([.][0-9]+)? (m|km)$')) !== null;
+}
+function notice(s) {
+  if (s.cleanupPending || s.stopOutcome === 'FAILED_OR_UNCONFIRMED') return '定位尚未确认停止，请先完成停止操作，再使用其他导航功能。';
+  if (s.status === 'permissionDenied') return '请在微信与系统设置中允许定位后重试。';
+  var message = s.message || '';
+  if (message.indexOf('请到路线起点附近') >= 0) return '请到路线起点附近再开始循迹。';
+  if (message.indexOf('暂停时已确认') >= 0) return '请回到暂停时的路段再继续，或结束循迹。';
+  if (s.status === 'error') return '请检查系统定位与微信权限，稍后重试。';
+  if (s.status === 'following' && s.offRouteStatus === 'suspected') return '请结合现场步道和地图返回路线。';
+  if (s.status === 'following' && (s.quality !== 'reliable' || s.stale)) return '定位较弱，路线进度暂不更新。';
+  if (s.status === 'starting') return '请在路线起点附近等待定位确认。';
+  if (s.status === 'resuming') return '正在重新确认暂停前的路段。';
+  return '';
+}
+module.exports = { statusText: statusText, qualityText: qualityText, hasProgress: hasProgress, notice: notice };
+</wxs>
+<view class="detail-nav" style="padding-top: {{detailNavigation.top}}px;">
+  <view class="detail-nav-row" style="height: {{detailNavigation.height}}px; padding-right: {{detailNavigation.right}}px;">
+    <button class="detail-nav-back" bindtap="onBackTap" aria-label="返回路线列表">‹ 返回</button>
+    <text class="detail-nav-title">路线详情</text>
+  </view>
+</view>
+<view style="height: {{detailNavigation.top + detailNavigation.height}}px;"></view>
 <view class="detail-page">
+  <view wx:if="{{nativeRecoveryMessage}}" class="native-recovery" role="alert">
+    <text>{{nativeRecoveryMessage}}</text>
+    <button class="navigation-button" bindtap="onRetryNativeCleanupTap">检查资源清理</button>
+  </view>
   <view wx:if="{{status === 'loading'}}" class="not-found-card">
     <text class="not-found-title">正在加载路线…</text>
     <text class="not-found-copy">请稍候</text>
@@ -104,39 +150,32 @@
       <view class="follow-panel real-follow-panel">
         <text class="follow-title">真实GPS循迹</text>
         <text wx:if="{{followPlatformBlock}}" class="follow-warning" role="alert">{{followPlatformBlock}}</text>
-        <text class="follow-status">{{followLabels[followState.status]}}</text>
-        <text class="navigation-note">仅在本页前台、由您主动开启。退出或切到后台会停止，不自动恢复。不保存或上传位置历史。</text>
-        <text class="navigation-note">真实蓝点来自手机定位，不吸附轨迹。</text>
-        <view class="follow-metrics">
-          <text>状态记录：{{followState.evidenceKind}} · 停止结果：{{followState.stopOutcome}}</text>
-          <text>SDK启动：{{followState.sdkStartAcknowledged ? '已确认' : '尚未确认'}} · 该记录有效位置：{{followState.observationCount}}次</text>
-          <text>B1状态：{{followState.b1Phase}} · {{followState.b1Reason || '无附加原因'}}</text>
-          <text>历史已确认距离：{{followState.confirmedText}}（沿线位置，非累计步行测距）</text>
-          <text>定位质量：{{followState.qualityText}}</text>
-          <text>定位精度：{{followState.accuracyText || '尚无真实位置'}}</text>
-          <text>最近更新：{{followState.updatedText || '等待真实定位'}}</text>
-          <text>B1已确认轨迹进度：{{followState.progressText}}</text>
-          <text>参考已走：{{followState.walkedText}} · 参考剩余：{{followState.remainingText}}</text>
+        <text class="follow-status">{{followUi.statusText(followState)}}</text>
+        <text class="navigation-note">仅本页前台运行；离页或切后台会停止，需手动恢复。不保存或上传位置历史。</text>
+        <view wx:if="{{followUi.hasProgress(followState)}}" class="follow-metrics">
+          <text>路线进度：{{followState.progressText}}</text>
+          <text>沿路线剩余距离：{{followState.remainingText}}</text>
         </view>
-        <text wx:if="{{followState.message}}" class="follow-warning" role="alert">{{followState.message}}</text>
-        <text wx:if="{{followState.offRouteStatus === 'suspected'}}" class="follow-warning">疑似偏离路线，请结合现场道路确认。</text>
+        <text wx:if="{{followUi.qualityText(followState)}}" class="navigation-note">{{followUi.qualityText(followState)}}</text>
+        <text wx:if="{{followUi.notice(followState)}}" class="follow-warning" role="alert">{{followUi.notice(followState)}}</text>
         <view class="follow-actions">
           <button class="navigation-button" bindtap="onStartFollowTap" disabled="{{!!followPlatformBlock || followState.cleanupPending || followState.status === 'stopping' || followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused'}}">开始真实循迹</button>
           <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following'}}" class="navigation-button" bindtap="onPauseFollowTap">暂停循迹</button>
           <button wx:if="{{followState.status === 'paused'}}" class="navigation-button" bindtap="onResumeFollowTap" disabled="{{!!followPlatformBlock}}">继续循迹</button>
-          <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused' || followState.cleanupPending}}" class="navigation-button" bindtap="onStopFollowTap">{{followState.cleanupPending ? '重试停止定位' : '结束循迹'}}</button>
+          <button wx:if="{{followState.status === 'starting' || followState.status === 'resuming' || followState.status === 'following' || followState.status === 'paused' || followState.cleanupPending}}" class="navigation-button" bindtap="onStopFollowTap">{{followState.cleanupPending ? '重试停止定位' : '停止真实循迹'}}</button>
           <button class="navigation-button" bindtap="onFollowRecenterTap" disabled="{{!followState.location || followState.stale || followState.quality !== 'reliable'}}">回到当前位置</button>
           <button wx:if="{{followState.canComplete}}" class="navigation-button" bindtap="onConfirmFollowTap">确认完成本次循迹</button>
         </view>
-        <button class="navigation-button" bindtap="onCheckFollowPrivacyTap" loading="{{followPrivacyStatus === 'checking'}}" disabled="{{followPrivacyStatus === 'checking'}}">检查隐私授权</button>
-        <button class="navigation-button" bindtap="onFollowPrivacyView">阅读隐私保护指引</button>
+        <view class="follow-actions follow-privacy-actions">
+          <button class="navigation-button" bindtap="onCheckFollowPrivacyTap" loading="{{followPrivacyStatus === 'checking'}}" disabled="{{followPrivacyStatus === 'checking'}}">检查隐私授权</button>
+          <button class="navigation-button" bindtap="onFollowPrivacyView">阅读隐私保护指引</button>
+        </view>
         <text class="navigation-note">{{followPrivacyMessage}}</text>
         <view wx:if="{{followPrivacyVisible}}" class="follow-privacy">
           <text>请阅读《{{followPrivacyContractName}}》。同意只处理微信隐私授权，不会自动定位；之后请主动点击开始或继续。</text>
           <button id="follow-privacy-agree" class="navigation-button" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onFollowPrivacyAgree">同意隐私指引</button>
           <button class="navigation-button" bindtap="onFollowPrivacyCancel">暂不授权</button>
         </view>
-        <text wx:if="{{nativeRecoveryMessage}}" class="follow-warning" role="alert">{{nativeRecoveryMessage}}</text>
         <text wx:if="{{accessRecoveryMessage}}" class="follow-warning" role="alert">{{accessRecoveryMessage}}</text>
         <button wx:if="{{accessRecoveryMessage}}" class="navigation-button" bindtap="onAccessRecoveryTap">检查单次定位请求状态</button>
       </view>
@@ -163,11 +202,7 @@
           <button class="navigation-button" bindtap="onSimulationResumeTap" disabled="{{!mapCenter || mapRenderError || simulationState.status !== 'paused'}}">继续</button>
           <button class="navigation-button" bindtap="onSimulationRestartTap" disabled="{{!mapCenter || mapRenderError}}">重新播放</button>
         </view>
-        <text class="navigation-note">模拟播放位置：{{simulationState.playbackText}}</text>
-        <text class="navigation-note">B1已确认进度：{{simulationState.matchedText}}</text>
-        <text class="navigation-note">剩余轨迹距离：{{simulationState.remainingText}}</text>
-        <text class="navigation-note">{{simulationState.b1Text}}</text>
-        <text class="navigation-note">自动快速演示，标准目标约17秒。播放位置与B1匹配进度可能不同，不代表实际徒步用时。</text>
+        <text wx:if="{{mapCenter && simulationState.status !== 'idle'}}" class="navigation-note">播放进度：{{simulationState.playbackText}}</text>
         <text wx:if="{{simulationState.message}}" class="simulation-warning" role="alert">{{simulationState.message}}</text>
       </view>
       <view wx:if="{{accessConsent.visible}}" class="access-consent-mask" catchtap="onAccessConsentCancel" data-request-id="{{accessConsent.requestId}}">
@@ -178,7 +213,7 @@
           <text>目的：规划您本次当前位置到“{{accessConsent.targetName}}”的临时步行接驳。</text>
           <text>您同意本次请求并完成微信必要授权后，起点和终点坐标将经CloudBase发送给高德。拒绝不影响查看绿色轨迹和节点。</text>
           <text selectable="true">高德隐私政策：{{accessConsent.policyUrl}}</text>
-          <text class="navigation-note">请打开微信隐私保护指引，在补充文档中点击高德官方政策链接查看全文。打开指引不代表已读完或已同意；返回后需重新点击“规划到这里”。真实接驳仍未启用。</text>
+          <text class="navigation-note">请打开微信隐私保护指引，在补充文档中点击高德官方政策链接查看全文。打开指引不代表已读完或已同意；返回后需重新点击“规划到这里”。{{accessConsent.ready ? "请明确选择本次规划。" : "真实接驳仍未启用。"}}</text>
           <button class="navigation-button" catchtap="onAccessPolicyTap" data-request-id="{{accessConsent.requestId}}" disabled="{{accessConsent.stage !== 'pending'}}">阅读隐私保护指引</button>
           <text wx:if="{{accessConsent.blockedReason}}" class="follow-warning" role="alert">{{accessConsent.blockedReason}}</text>
           <text wx:if="{{accessConsent.message}}" class="follow-warning" role="alert">{{accessConsent.message}}</text>

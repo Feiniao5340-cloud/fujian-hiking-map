@@ -895,6 +895,116 @@ async function main() {
   await test('D2J approved release late callbacks after unload cannot write',async()=>{
     const h=harness(undefined,{foregroundReleaseEnabled:true}),p=h.page();h.behavior.envVersion='release';await h.open(p);await p.onStartFollowTap();const old=h.listener();p.onUnload();await flush();const updates=h.calls.updates.length;old({...formal[0].startPoint,accuracy:5});assert.equal(h.calls.updates.length,updates);assert.equal(h.listener(),null);
   });
+
+  await test('D2M old failed Native cleanup can be genuinely retried from a new GPS page',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;p.onUnload();h.calls.removes.at(-1).fail();await flush();const q=h.page();await h.open(q,formal[0]);h.behavior.holdRemove=false;await q.onStartFollowTap();assert.equal(h.calls.start.length,1);assert.equal(h.calls.removes.length,2);await q.onStopFollowTap();assert.equal(q.getNavigationMode(),'IDLE');q.onUnload();
+  });
+  await test('D2M unresolved old Native add ACK remains blocked then releases only after actual ACK',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));let add;const create=h.wx.createMapContext;h.wx.createMapContext=(...a)=>({...create(...a),addMarkers(o){add=o;}});p.onSimulationStartTap();p.onUnload();await h.advance(1600);const q=h.page();await h.open(q,formal[0]);await q.onStartFollowTap();assert.equal(h.calls.start.length,0);assert.equal(q.getNavigationResourceSummary()[0].cleanupPending,true);assert.equal(q.getNavigationResourceSummary()[0].ownerUnloaded,true);add.success();await flush();assert.equal(q.getNavigationMode(),'IDLE');q.onUnload();
+  });
+  await test('D2M approved Access waits for old Native cleanup and fails closed without its ACK',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;p.onUnload();h.calls.removes.at(-1).fail();await flush();const q=h.page();await h.open(q,formal[0]);const pending=q.prepareNavigationAction('ACCESS');await flush();assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);h.calls.removes.at(-1).fail();assert.equal(await pending,null);assert.equal(q.getNavigationMode(),'NATIVE_OVERVIEW');h.behavior.holdRemove=false;const claim=await q.prepareNavigationAction('ACCESS');assert(claim);q.releaseNavigationMode(claim);assert.equal(q.getNavigationMode(),'IDLE');q.onUnload();
+  });
+  await test('D2M Native to GPS refreshes display only after confirmed remove',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;const start=p.onStartFollowTap();await flush();assert.equal(p.data.overviewState.status,'playing');h.calls.removes.at(-1).success();await start;assert.equal(p.data.overviewState.status,'idle');await p.onStopFollowTap();p.onUnload();
+  });
+  await test('D2M controlled return keeps map alive until actual Native removal ACK',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));let backs=0;
+    h.wx.navigateBack=()=>{backs++;p.onUnload();};p.onSimulationStartTap();h.behavior.holdRemove=true;
+    const returning=p.onBackTap();await flush();assert.equal(backs,0);assert(!p._unloaded);assert.equal(p.getNavigationMode(),'NATIVE_OVERVIEW');
+    p.onBackTap();assert.equal(h.calls.removes.length,1);h.calls.removes[0].success();await returning;
+    assert.equal(backs,1);assert.equal(p.getNavigationMode(),'IDLE');assert.equal(h.calls.start.length,0);assert.equal(h.calls.locate.length,0);
+  });
+  await test('D2M controlled return fails closed on Native timeout and never navigates on late ACK',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));let backs=0;
+    h.wx.navigateBack=()=>{backs++;p.onUnload();};p.onSimulationStartTap();h.behavior.holdRemove=true;
+    const returning=p.onBackTap();await h.advance(1600);await returning;assert.equal(backs,0);assert(!p._unloaded);
+    assert.equal(p.getNavigationMode(),'NATIVE_OVERVIEW');assert.equal(p._nativeCleanup.error,'NATIVE_REMOVE_TIMEOUT');
+    h.calls.removes[0].success();await flush();assert.equal(backs,0);assert.equal(p.getNavigationMode(),'IDLE');
+    await p.onBackTap();assert.equal(backs,1);
+  });
+  await test('D2N custom top back and bottom back bind the same controlled exit; capsule layout is bounded',async()=>{
+    assert.equal(JSON.parse(read('miniprogram/pages/route-detail/index.json')).navigationStyle,'custom');
+    const wxml=read('miniprogram/pages/route-detail/index.wxml');assert(/detail-nav-back[^>]*bindtap="onBackTap"/.test(wxml));assert(/bottom-back[^>]*bindtap="onBackTap"/.test(wxml));
+    const h=harness(),p=h.page();h.wx.getWindowInfo=()=>({statusBarHeight:28,windowWidth:400});h.wx.getMenuButtonBoundingClientRect=()=>({top:36,height:32,left:300});
+    await h.open(p);assert.deepEqual(plain(p.data.detailNavigation),{top:28,height:48,right:108});
+    h.wx.getMenuButtonBoundingClientRect=()=>({top:NaN,height:0,left:0});p.updateDetailNavigation();assert.equal(p.data.detailNavigation.height,48);p.onUnload();
+  });
+  await test('D2N record-level recovery works after owner unload without invoking its Page cleanup methods',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;p.onUnload();h.calls.removes[0].fail();
+    p.stopNativeOverview=()=>{throw Error('old Page method forbidden');};p.retryNativeOverviewCleanup=p.stopNativeOverview;
+    const q=h.page();await h.open(q,formal[0]);q.onShow();assert(q.data.nativeRecoveryMessage);h.behavior.holdRemove=false;await q.onRetryNativeCleanupTap();
+    assert.equal(q.getNavigationMode(),'IDLE');assert.equal(q.getNavigationResourceSummary().length,0);assert.equal(q.getNativeCleanupDiagnostic().state,'ACK_SUCCESS');assert.equal(q.getNativeCleanupDiagnostic().ownerReleased,true);assert.equal(q.getNativeCleanupDiagnostic().ownerUnloaded,true);assert.equal(h.calls.start.length,0);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);q.onUnload();
+  });
+  await test('D2N uncontrolled system-equivalent unload safely blocks new Native GPS and Access until real late ACK',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;p.onUnload();
+    const q=h.page();await h.open(q,formal.find(r=>r._id==='fj-route-010'));q.onShow();q.onSimulationStartTap();assert.equal(h.calls.moves.length,1);
+    const starting=q.onStartFollowTap();await h.advance(1600);await starting;assert.equal(h.calls.start.length,0);assert.equal(await q.prepareNavigationAction('ACCESS'),null);
+    const r=q.getNavigationResourceSummary()[0];assert.equal(r.ownerUnloaded,true);assert.equal(r.cleanupState,'TIMED_OUT_UNCONFIRMED');assert.equal(r.cleanupPending,true);
+    assert.equal(h.calls.removes.length,1);assert.equal(h.calls.locate.length,0);assert.equal(h.calls.cloud.length,0);
+    const updates=h.calls.updates.length;h.calls.removes[0].complete({errMsg:'removeMarkers:ok'});await flush();assert.equal(h.calls.updates.length,updates);assert.equal(q.getNavigationMode(),'IDLE');q.onUnload();
+  });
+  await test('D2N hide then unload shares cleanup; late fail remains recoverable and never writes dead Page',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();h.behavior.holdRemove=true;p.onHide();p.onUnload();assert.equal(h.calls.removes.length,1);
+    await h.advance(1600);const updates=h.calls.updates.length;h.calls.removes[0].complete({errMsg:'removeMarkers:fail map unavailable'});assert.equal(h.calls.updates.length,updates);
+    assert.equal(p.getNavigationResourceSummary()[0].cleanupState,'ACK_FAILED');assert.equal(p._nativeCleanup.pending,false);
+    const q=h.page();await h.open(q,formal[0]);h.behavior.holdRemove=false;await q.onRetryNativeCleanupTap();assert.equal(q.getNavigationMode(),'IDLE');q.onUnload();
+  });
+  await test('D2N acknowledged unload then repeated Native page transitions leave no owner or duplicate removal',async()=>{
+    const h=harness();for(let i=0;i<3;i++){
+      const p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));p.onSimulationStartTap();await new Promise(resolve=>p.stopNativeOverview(resolve));p.onUnload();
+      const q=h.page();await h.open(q,formal[0]);assert.equal(q.getNavigationMode(),'IDLE');assert.equal(q.getNavigationResourceSummary().length,0);q.onUnload();
+    }assert.equal(h.calls.removes.length,3);assert.equal(h.calls.start.length,0);assert.equal(h.calls.cloud.length,0);
+  });
+  await test('D2N controlled back failure holds map and exposes recovery without fake release',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal.find(r=>r._id==='fj-route-008'));let backs=0;h.wx.navigateBack=()=>{backs++;p.onUnload();};
+    p.onSimulationStartTap();h.behavior.holdRemove=true;const back=p.onBackTap();h.calls.removes[0].fail();await back;assert.equal(backs,0);assert(p.data.nativeRecoveryMessage);assert.equal(p.getNavigationMode(),'NATIVE_OVERVIEW');
+    h.behavior.holdRemove=false;await p.onRetryNativeCleanupTap();await p.onBackTap();assert.equal(backs,1);assert.equal(p.getNavigationMode(),'IDLE');
+  });
+  const userUiSource=read('miniprogram/pages/route-detail/index.wxml').match(/<wxs module="followUi">([\s\S]*?)<\/wxs>/);
+  assert(userUiSource,'GPS presentation module must exist');
+  const userUiModule={exports:{}};vm.runInNewContext(userUiSource[1],{module:userUiModule,getRegExp:(pattern,flags)=>new RegExp(pattern,flags)});
+  const userUi=userUiModule.exports;
+  const reliableView={status:'following',b1Phase:'following',b1Reason:null,quality:'reliable',stale:false,offRouteStatus:'near',progressText:'12.5%',remainingText:'40.8 km',message:'',cleanupPending:false};
+  await test('D4 user GPS card removes diagnostic bindings but keeps operations and privacy facts',async()=>{
+    const view=read('miniprogram/pages/route-detail/index.wxml').replace(/<wxs[\s\S]*?<\/wxs>/g,'');
+    const panel=view.split('<view class="follow-panel real-follow-panel">')[1].split('<view wx:if="{{overviewMode}}"')[0];
+    for(const text of ['NO_SESSION','NOT_REQUESTED','SDK启动','有效位置','B1状态','历史已确认距离','定位精度','最近更新','参考已走','参考剩余'])assert(!panel.includes(text));
+    for(const field of ['evidenceKind','stopOutcome','sdkStartAcknowledged','observationCount','b1Phase','b1Reason','confirmedText','accuracyText','updatedText','walkedText'])assert(!panel.includes('followState.'+field));
+    for(const handler of ['onStartFollowTap','onStopFollowTap','onPauseFollowTap','onResumeFollowTap','onFollowRecenterTap','onCheckFollowPrivacyTap','onFollowPrivacyView'])assert(panel.includes('bindtap="'+handler+'"'));
+    for(const text of ['仅本页前台运行','离页或切后台会停止','需手动恢复','不保存或上传位置历史','路线进度','沿路线剩余距离'])assert(panel.includes(text));
+  });
+  await test('D4 user labels separate idle acquiring following paused and ended without mutating diagnostics',async()=>{
+    for(const [status,label]of [['idle','尚未开始'],['starting','正在获取定位'],['resuming','正在获取定位'],['following','正在循迹'],['paused','已暂停'],['ended','已停止'],['completed','已结束']]){
+      const s={...reliableView,status,evidenceKind:'LAST_SESSION',stopOutcome:'NOT_REQUESTED',sdkStartAcknowledged:true,observationCount:7,b1Reason:null};const original=JSON.stringify(s);
+      assert.equal(userUi.statusText(s),label);assert.equal(userUi.hasProgress(s),status==='following');assert.equal(JSON.stringify(s),original);
+    }
+    assert.equal(userUi.qualityText({...reliableView,status:'idle'}),'');
+  });
+  await test('D4 progress is visible only after actual Page start confirmation; internal evidence survives stop',async()=>{
+    const h=harness(),p=h.page();await h.open(p,formal[0]);assert.equal(userUi.hasProgress(p.data.followState),false);await p.onStartFollowTap();
+    assert.equal(p.data.followState.sdkStartAcknowledged,true);assert.equal(userUi.hasProgress(p.data.followState),false);assert.equal(userUi.statusText(p.data.followState),'正在获取定位');
+    await h.confirmStart();assert.equal(userUi.hasProgress(p.data.followState),true);assert.equal(userUi.statusText(p.data.followState),'正在循迹');assert.equal(p.data.followState.observationCount,3,'confirmStart fixture emits exactly three observations');
+    await p.onStopFollowTap();assert.equal(userUi.hasProgress(p.data.followState),false);assert.equal(userUi.statusText(p.data.followState),'已停止');
+    assert.equal(p.data.followState.sdkStartAcknowledged,true);assert.equal(p.data.followState.evidenceKind,'LAST_SESSION');assert.equal(p.data.followState.stopOutcome,'CLEANUP_CONTRACT_CONFIRMED');p.onUnload();
+  });
+  await test('D4 unavailable weak stale and off-route states hide untrusted values',async()=>{
+    for(const patch of [{quality:'degraded'},{quality:'jump'},{quality:'ambiguous'},{quality:'recovering'},{quality:'unavailable'},{stale:true},{offRouteStatus:'suspected'},{b1Phase:'starting'}])assert.equal(userUi.hasProgress({...reliableView,...patch}),false);
+    assert.equal(userUi.statusText({...reliableView,quality:'degraded'}),'定位信号较弱');assert.equal(userUi.qualityText({...reliableView,quality:'degraded'}),'定位较弱');
+    const off={...reliableView,offRouteStatus:'suspected',b1Reason:'OFF_ROUTE_OR_PENDING'};assert.equal(userUi.statusText(off),'疑似偏离路线');assert(!userUi.notice(off).includes('OFF_ROUTE'));
+  });
+  await test('D4 missing or invalid numbers never become fake zero percent or remaining distance',async()=>{
+    for(const progressText of ['',undefined,'待确认','NaN%','101%','-1%'])assert.equal(userUi.hasProgress({...reliableView,progressText}),false);
+    for(const remainingText of ['',undefined,'暂无数据','NaN km','-1 m'])assert.equal(userUi.hasProgress({...reliableView,remainingText}),false);
+    assert.equal(userUi.hasProgress({...reliableView,progressText:'0.0%',remainingText:'0 m'}),true,'confirmed zero is valid; unconfirmed zero is hidden');
+    assert.equal(userUi.hasProgress({...reliableView,status:'starting',progressText:'0.0%',remainingText:'0 m'}),false);
+  });
+  await test('D4 user errors preserve start and stop protection without exposing raw SDK codes',async()=>{
+    assert(userUi.notice({...reliableView,status:'error',message:'请到路线起点附近再开始循迹。'}).includes('起点'));
+    assert(userUi.notice({...reliableView,status:'error',message:'请回到暂停时已确认的路段再继续，或结束循迹。'}).includes('暂停'));
+    const s={...reliableView,status:'error',message:'定位SDK已启动，但未收到有效位置',stopOutcome:'FAILED_OR_UNCONFIRMED'};assert(userUi.notice(s).includes('尚未确认停止'));assert(!/SDK|FAILED_OR_UNCONFIRMED/.test(userUi.notice(s)));
+    assert(userUi.notice({...reliableView,status:'permissionDenied'}).includes('允许定位'));
+  });
   for (const name of ['getLocation', 'startLocationUpdate', 'onLocationChange']) assert(config.requiredPrivateInfos.includes(name));
   assert(!config.requiredBackgroundModes); assert(!config.permission['scope.userLocationBackground']);
   const source = read('miniprogram/services/trail-follow-service.js');
